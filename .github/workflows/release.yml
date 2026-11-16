@@ -1,0 +1,31 @@
+# When you publish a Release on GitHub, this zips addon/DungeonWinner
+# and attaches it to the release as DungeonWinner-<tag>-forever.zip
+name: Package release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version in .toc from the release tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^## Version:.*/## Version: ${VERSION}/" addon/DungeonWinner/DungeonWinner.toc
+
+      - name: Build zip
+        run: |
+          cd addon
+          zip -r "../DungeonWinner-${GITHUB_REF_NAME}-forever.zip" DungeonWinner
+
+      - name: Attach zip to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DungeonWinner-*-forever.zip
