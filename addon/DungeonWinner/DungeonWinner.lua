@@ -241,11 +241,11 @@ local function InDungeon()
     return inInstance and instanceType == "party"
 end
 
-local function StartRun(name, instanceID, isTest)
+local function StartRun(name, instanceID, isTest, manual)
     local now = time()
     local run = {
-        id = tostring(now) .. "-" .. tostring(instanceID or 0) .. (isTest and "-test" or ""),
-        name = name, instanceID = instanceID, started = now, test = isTest,
+        id = tostring(now) .. "-" .. tostring(instanceID or 0) .. (isTest and "-test" or "") .. (manual and "-manual" or ""),
+        name = name, instanceID = instanceID, started = now, test = isTest, manual = manual,
     }
     if isTest then
         DungeonWinnerDB.testRun = run
@@ -257,8 +257,42 @@ local function StartRun(name, instanceID, isTest)
     return run
 end
 
+-- A run you started yourself (/dw start or the Start run button). It tracks
+-- Greed wins anywhere until you end it, and dungeons don't replace it.
+local function ManualActive()
+    local run = DungeonWinnerDB.run
+    return run ~= nil and run.manual and not run.ended
+end
+
+local function StartManualRun(name)
+    StartRun(name or ("Run " .. date("%b %d, %H:%M")), nil, false, true)
+    Print("Started tracking Greed wins: " .. DungeonWinnerDB.run.name .. ". End it with /dw stop.")
+    if Render then Render() end
+end
+
+local function EndManualRun()
+    if not ManualActive() then
+        Print("No manual run to end.")
+        return
+    end
+    DungeonWinnerDB.run.ended = time()
+    Print("Ended run: " .. DungeonWinnerDB.run.name .. ".")
+    -- If you're standing in a dungeon, carry on tracking it as a normal dungeon run
+    if InDungeon() then
+        local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
+        StartRun(name, instanceID)
+        Print("Tracking Greed wins for " .. (name or "this dungeon") .. ".")
+    end
+    if Render then Render() end
+end
+
 local function CheckInstance()
     local run = DungeonWinnerDB.run
+    if ManualActive() then
+        inDungeon = InDungeon() -- manual runs aren't replaced by dungeons
+        if Render then Render() end
+        return
+    end
     if InDungeon() then
         local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
         local now = time()
@@ -290,7 +324,8 @@ local function NewItem(link, name, icon)
             if n then item.rolls[n] = { class = select(2, UnitClass(unit)) } end
         end)
     end
-    if inDungeon and DungeonWinnerDB.run then
+    local run = DungeonWinnerDB.run
+    if run and not run.ended and (ManualActive() or (inDungeon and not run.manual)) then
         item.runId = DungeonWinnerDB.run.id
         showingTest = false
     end
@@ -378,7 +413,31 @@ local function MoneyText(copper)
     return ("%dg %ds %dc"):format(math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100)
 end
 
-local function HandleMessage(def, f)
+-- Roll a 67 and the addon tells your group about it
+local ANNOUNCE_67 = "~~~ 6 7 ~~~ ┐(°o°)┌ ~~~ 6 7 ~~~"
+
+local function GroupChannel()
+    if LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then return "INSTANCE_CHAT" end
+    if IsInRaid() then return "RAID" end
+    if IsInGroup() then return "PARTY" end
+    return nil
+end
+
+local function Announce67()
+    local channel = GroupChannel()
+    if not channel then
+        Print(ANNOUNCE_67) -- not in a group: just show it to you
+        return
+    end
+    local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+    local ok, err = pcall(send, ANNOUNCE_67, channel)
+    if not ok then
+        Print(ANNOUNCE_67)
+        if debugMode then Print("Couldn't send to " .. channel .. ":", tostring(err)) end
+    end
+end
+
+local function HandleMessage(def, f, isTest)
     local who = def.self and playerName or GroupKey(CleanName(f.player))
     local id = ItemID(f.item)
     if not id then return end
@@ -398,6 +457,9 @@ local function HandleMessage(def, f)
         local r = GetEntry(item, who)
         r.choice = r.choice or def.choice
         r.roll = tonumber(f.roll)
+        if r.roll == 67 and who == playerName and not isTest and Setting("announce67") then
+            Announce67()
+        end
 
     elseif def.kind == "won" then
         local item = FindItem(id, f.item, function(it)
@@ -416,7 +478,7 @@ end
 
 -- "Active everywhere" off (default): only record rolls inside dungeons and raids
 local function IsActive()
-    if Setting("activeEverywhere") then return true end
+    if Setting("activeEverywhere") or ManualActive() then return true end
     local inInstance, instanceType = IsInInstance()
     return inInstance and (instanceType == "party" or instanceType == "raid")
 end
@@ -432,7 +494,7 @@ local function OnLootMessage(msg, force)
         local f = MatchMessage(def, msg)
         if f then
             if debugMode then Print("matched", def.key) end
-            HandleMessage(def, f)
+            HandleMessage(def, f, force) -- force = test roll, never announced
             Render()
             return
         end
@@ -875,7 +937,8 @@ local function ComputeLeaderboard(run)
         end
     end
     -- Put everyone in the current group on the board, even with nothing yet
-    if not run.test and inDungeon and IsInGroup() then
+    local live = not run.test and (ManualActive() and run == DungeonWinnerDB.run or (inDungeon and not run.manual))
+    if live and IsInGroup() then
         ForEachGroupMember(function(unit)
             local n = UnitName(unit)
             if n and not scores[n] then
@@ -899,7 +962,6 @@ board:Hide()
 
 board.title = board:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 board.title:SetPoint("TOPLEFT", 4, -4)
-board.title:SetPoint("RIGHT", -4, 0)
 board.title:SetJustifyH("LEFT")
 board.title:SetWordWrap(false)
 
@@ -912,19 +974,41 @@ board.sub:SetWordWrap(false)
 board.empty = board:CreateFontString(nil, "OVERLAY", "GameFontDisable")
 board.empty:SetPoint("TOP", 0, -60)
 
-board.reset = CreateFrame("Button", nil, frame)
-board.reset:SetSize(110, 14)
-board.reset:SetPoint("BOTTOMLEFT", 8, 3)
-board.reset.text = board.reset:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-board.reset.text:SetPoint("LEFT")
-board.reset.text:SetText("Shift-click to reset")
-board.reset:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 0.3, 0.3) end)
-board.reset:SetScript("OnLeave", function(self) self.text:SetTextColor(0.5, 0.5, 0.5) end)
-board.reset:SetScript("OnClick", function()
-    if not IsShiftKeyDown() then return end
+-- Buttons at the top-right of the leaderboard: [Start run / End run] [Reset]
+local function BoardButton(width)
+    local b = CreateFrame("Button", nil, board, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    b:SetSize(width, 18)
+    b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    b:SetBackdropColor(1, 1, 1, 0.06)
+    b:SetBackdropBorderColor(1, 1, 1, 0.18)
+    b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    b.text:SetPoint("CENTER")
+    b:SetScript("OnEnter", function(self) self:SetBackdropColor(1, 1, 1, 0.14) end)
+    b:SetScript("OnLeave", function(self) self:SetBackdropColor(1, 1, 1, 0.06) end)
+    return b
+end
+
+board.reset = BoardButton(46)
+board.reset:SetPoint("TOPRIGHT", board, "TOPRIGHT", -2, -2)
+board.reset.text:SetText("Reset")
+board.reset:SetScript("OnClick", function(self)
+    -- First click asks, second click (within 3 seconds) resets
+    if not self.confirming then
+        self.confirming = true
+        self.text:SetText("|cffff5555Sure?|r")
+        C_Timer.After(3, function()
+            self.confirming = false
+            self.text:SetText("Reset")
+        end)
+        return
+    end
+    self.confirming = false
+    self.text:SetText("Reset")
     if showingTest then
         DungeonWinnerDB.testRun = nil
         showingTest = false
+    elseif ManualActive() then
+        StartRun(DungeonWinnerDB.run.name, nil, false, true) -- fresh start, same name
     elseif InDungeon() then
         local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
         StartRun(name, instanceID)
@@ -933,7 +1017,15 @@ board.reset:SetScript("OnClick", function()
     end
     Render()
 end)
-board.reset:Hide()
+
+board.toggle = BoardButton(66)
+board.toggle:SetPoint("RIGHT", board.reset, "LEFT", -4, 0)
+board.toggle:SetScript("OnClick", function()
+    if ManualActive() then EndManualRun() else StartManualRun() end
+end)
+
+-- keep the run name clear of the buttons
+board.title:SetPoint("RIGHT", board.toggle, "LEFT", -6, 0)
 
 local RANK_COLORS = { { 1, 0.82, 0 }, { 0.8, 0.8, 0.85 }, { 0.8, 0.5, 0.25 } }
 local boardRows = {}
@@ -985,18 +1077,21 @@ local function RenderBoard()
     for _, r in ipairs(boardRows) do r:Hide() end
     local run = showingTest and DungeonWinnerDB.testRun or DungeonWinnerDB.run
 
+    board.toggle.text:SetText(ManualActive() and "End run" or "Start run")
+
     if not run then
-        board.title:SetText("No dungeon run yet")
-        board.sub:SetText("Enter a dungeon to start tracking Greed wins.")
+        board.title:SetText("No run yet")
+        board.sub:SetText("Enter a dungeon, or click Start run below.")
         board.empty:Hide()
         board.reset:Hide()
         return
     end
 
-    local live = (not run.test) and inDungeon
-    local minutes = math.floor(((run.leftAt or time()) - run.started) / 60)
+    local live = not run.test and (ManualActive() or (inDungeon and not run.manual))
+    local minutes = math.floor(((run.ended or run.leftAt or time()) - run.started) / 60)
     local prices = (Setting("useAH") and AuctionatorReady()) and "Auctionator prices" or "vendor prices"
-    local status = run.test and "test data" or (live and (minutes .. "m, in progress") or (minutes .. "m, finished"))
+    local kind = run.manual and "manual, " or ""
+    local status = run.test and "test data" or (kind .. minutes .. "m, " .. (live and "in progress" or "finished"))
     board.title:SetText(run.name or "Dungeon")
     board.sub:SetText("Greed wins only - " .. prices .. " - " .. status)
 
@@ -1040,8 +1135,7 @@ function Render()
         RenderBoard()
         return
     end
-    board:Hide()
-    board.reset:Hide()
+    board:Hide() -- its buttons hide with it
     scroll:Show()
     for _, c in ipairs(cardPool) do c:Hide() end
     for _, r in ipairs(rowPool) do r:Hide() end
@@ -1082,7 +1176,7 @@ local UpdateMinimapButton -- defined in the minimap section below
 local RunTest             -- defined in the test section below
 
 local settings = CreateFrame("Frame", "DungeonWinnerSettings", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-local SETTINGS_BASE_H = 300
+local SETTINGS_BASE_H = 344
 settings:SetSize(300, SETTINGS_BASE_H)
 settings:SetPoint("CENTER", 0, 80)
 settings:SetFrameStrata("DIALOG")
@@ -1161,6 +1255,11 @@ AddCheck(-210, "Show minimap button",
     function() return DungeonWinnerDB.settings.showMinimap end,
     function(v) DungeonWinnerDB.settings.showMinimap = v; UpdateMinimapButton() end,
     "If hidden, bring it back with /dw minimap")
+
+AddCheck(-254, "Announce 67s",
+    function() return Setting("announce67") end,
+    function(v) DungeonWinnerDB.settings.announce67 = v end,
+    "Tells your group when you roll a 67")
 
 settings:SetScript("OnShow", function()
     for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
@@ -1263,7 +1362,6 @@ local function ApplyTheme()
     Anchor(bar, "TOPRIGHT", -6 - p, -55 - p, "BOTTOMRIGHT", -6 - p, 18 + p)
     bar:GetThumbTexture():SetVertexColor(ar, ag, ab, 1)
     Anchor(board, "TOPLEFT", 6 + p, -53 - p, "BOTTOMRIGHT", -6 - p, 18 + p)
-    Anchor(board.reset, "BOTTOMLEFT", 8 + p, 3 + p)
     Anchor(grip, "BOTTOMRIGHT", -2 - p, 2 + p)
 
     -- Settings window
@@ -1353,8 +1451,8 @@ themeNext:SetScript("OnClick", function() StepTheme(1) end)
 
 function PositionThemePicker()
     local p = CurrentTheme().pad
-    Anchor(themeLabel, "TOPLEFT", 16 + p, -263 - p)
-    Anchor(themeNext, "TOPRIGHT", -12 - p, -258 - p)
+    Anchor(themeLabel, "TOPLEFT", 16 + p, -307 - p)
+    Anchor(themeNext, "TOPRIGHT", -12 - p, -302 - p)
     themeBox:ClearAllPoints()
     themeBox:SetPoint("RIGHT", themeNext, "LEFT", -2, 0)
     themePrev:ClearAllPoints()
@@ -1408,6 +1506,8 @@ local function RegisterBlizzardSettings()
         Check(st, "showMinimap", "Show minimap button", true,
             "If hidden, bring it back with /dw minimap.",
             function() UpdateMinimapButton() end)
+        Check(st, "announce67", "Announce 67s", true,
+            "When you roll a 67, tells your group:\n" .. ANNOUNCE_67)
 
         Header("Leaderboard")
         Check(st, "useAH", "Use auction house prices", false,
@@ -1752,6 +1852,7 @@ events:SetScript("OnEvent", function(_, event, ...)
             if st.useAH == nil then st.useAH = false end
             if st.activeEverywhere == nil then st.activeEverywhere = false end
             if st.theme == nil or not THEMES[st.theme] then st.theme = "minimal" end
+            if st.announce67 == nil then st.announce67 = true end
             st.minimap = st.minimap or { angle = 225 }
             if st.showMinimap == nil then st.showMinimap = not st.minimap.hide end
             st.minimap.hide = nil
@@ -1799,7 +1900,20 @@ end)
 SLASH_DUNGEONWINNER1 = "/dungeonwinner"
 SLASH_DUNGEONWINNER2 = "/dw"
 SlashCmdList.DUNGEONWINNER = function(msg)
-    msg = strtrim(msg or ""):lower()
+    local raw = strtrim(msg or "")
+    msg = raw:lower()
+    local cmd = msg:match("^(%S*)")
+    if cmd == "start" then
+        local name = raw:match("^%S+%s+(.+)$")
+        StartManualRun(name)
+        view = "board"
+        frame:Show()
+        Render()
+        return
+    elseif cmd == "stop" or cmd == "end" then
+        EndManualRun()
+        return
+    end
     if msg == "clear" then
         wipe(DungeonWinnerDB.history)
         Render()
@@ -1828,6 +1942,12 @@ SlashCmdList.DUNGEONWINNER = function(msg)
         Print("Minimap button:", show and "shown" or "hidden")
     elseif msg == "test" then
         RunTest()
+    elseif msg == "67" then
+        if not IsDeveloper() then
+            Print("That command is for the addon developer only.")
+        else
+            Announce67()
+        end
     elseif msg == "debug" then
         if not IsDeveloper() then
             Print("That command is for the addon developer only.")
@@ -1837,7 +1957,7 @@ SlashCmdList.DUNGEONWINNER = function(msg)
         end
     elseif msg == "help" then
         if IsDeveloper() then
-            Print("/dw - toggle window | board | settings | test | clear | auto | minimap | dev: debug")
+            Print("/dw - toggle window | board | start [name] | stop | settings | test | clear | auto | minimap | dev: debug, 67")
         else
             Print("/dw - toggle window | board | settings | test | clear | auto | minimap")
         end

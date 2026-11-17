@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2
+
+- Start a leaderboard run manually with the Start run button (top of the Leaderboard tab) or `/dw start [name]`, and end it with End run or `/dw stop`. Manual runs track Greed wins anywhere until you end them.
+- Reset is now a button at the top of the Leaderboard tab; click it twice to confirm.
+- Roll a 67 and DungeonWinner announces it to your group (setting: Announce 67s, on by default).
+
 ## v0.1.1
 
 - Settings now live in the game's own options: Esc > Options > AddOns > DungeonWinner.
