@@ -976,8 +976,8 @@ board.empty = board:CreateFontString(nil, "OVERLAY", "GameFontDisable")
 board.empty:SetPoint("TOP", 0, -60)
 
 -- Buttons at the top-right of the leaderboard: [Start run / End run] [Reset]
-local function BoardButton(width)
-    local b = CreateFrame("Button", nil, board, BackdropTemplateMixin and "BackdropTemplate" or nil)
+local function BoardButton(width, parent)
+    local b = CreateFrame("Button", nil, parent or board, BackdropTemplateMixin and "BackdropTemplate" or nil)
     b:SetSize(width, 18)
     b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     b:SetBackdropColor(1, 1, 1, 0.06)
@@ -1027,6 +1027,41 @@ end)
 
 -- keep the run name clear of the buttons
 board.title:SetPoint("RIGHT", board.toggle, "LEFT", -6, 0)
+
+-- Clear button on the Rolls tab. It hides rolls from the list but keeps them
+-- for the leaderboard, so clearing never changes anyone's score.
+local function ClearRolls()
+    local hist = DungeonWinnerDB.history
+    for i = #hist, 1, -1 do
+        local item = hist[i]
+        if not item.done then
+            -- still rolling: leave it so you can watch it finish
+        elseif item.runId then
+            item.hidden = true       -- still counted on its leaderboard
+        else
+            table.remove(hist, i)    -- not part of any leaderboard, safe to delete
+        end
+    end
+    Render()
+end
+
+local clearBtn = BoardButton(46, frame)
+clearBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -29)
+clearBtn.text:SetText("Clear")
+clearBtn:SetScript("OnClick", function(self)
+    if not self.confirming then
+        self.confirming = true
+        self.text:SetText("|cffff5555Sure?|r")
+        C_Timer.After(3, function()
+            self.confirming = false
+            self.text:SetText("Clear")
+        end)
+        return
+    end
+    self.confirming = false
+    self.text:SetText("Clear")
+    ClearRolls()
+end)
 
 local RANK_COLORS = { { 1, 0.82, 0 }, { 0.8, 0.8, 0.85 }, { 0.8, 0.5, 0.25 } }
 local boardRows = {}
@@ -1129,6 +1164,7 @@ end
 function Render()
     if not frame:IsShown() then return end
     UpdateTabs()
+    clearBtn:SetShown(view == "rolls")
     if view == "board" then
         scroll:Hide()
         bar:Hide()
@@ -1143,22 +1179,24 @@ function Render()
 
     local y, ci, ri = 0, 0, 0
     for _, item in ipairs(DungeonWinnerDB.history) do
-        ci = ci + 1
-        local c = GetCard(ci)
-        FillCard(c, item)
-        Place(c, y)
-        y = y + CARD_H
+        if not item.hidden then
+            ci = ci + 1
+            local c = GetCard(ci)
+            FillCard(c, item)
+            Place(c, y)
+            y = y + CARD_H
 
-        if not item.collapsed then
-            for _, name in ipairs(SortedNames(item)) do
-                ri = ri + 1
-                local r = GetRow(ri)
-                FillRow(r, item, name)
-                Place(r, y)
-                y = y + ROW_H
+            if not item.collapsed then
+                for _, name in ipairs(SortedNames(item)) do
+                    ri = ri + 1
+                    local r = GetRow(ri)
+                    FillRow(r, item, name)
+                    Place(r, y)
+                    y = y + ROW_H
+                end
             end
+            y = y + GAP
         end
-        y = y + GAP
     end
 
     emptyText:SetShown(ci == 0)
@@ -1357,6 +1395,7 @@ local function ApplyTheme()
     Anchor(divider, "TOPLEFT", 1 + p, -26 - p, "TOPRIGHT", -1 - p, -26 - p)
     Anchor(tabs.rolls, "TOPLEFT", 8 + p, -28 - p)
     Anchor(tabs.board, "TOPLEFT", 72 + p, -28 - p)
+    Anchor(clearBtn, "TOPRIGHT", -8 - p, -29 - p)
     for _, tab in pairs(tabs) do tab.line:SetColorTexture(ar, ag, ab, 1) end
     Anchor(divider2, "TOPLEFT", 1 + p, -49 - p, "TOPRIGHT", -1 - p, -49 - p)
     Anchor(scroll, "TOPLEFT", 6 + p, -53 - p, "BOTTOMRIGHT", -16 - p, 16 + p)
@@ -1916,9 +1955,8 @@ SlashCmdList.DUNGEONWINNER = function(msg)
         return
     end
     if msg == "clear" then
-        wipe(DungeonWinnerDB.history)
-        Render()
-        Print("History cleared.")
+        ClearRolls()
+        Print("Rolls cleared (leaderboards keep their scores).")
     elseif msg == "auto" then
         if blizzSettings.autoShow then
             blizzSettings.autoShow:SetValue(not DungeonWinnerDB.autoShow)

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.4
+
+- Clear button at the top of the Rolls tab (click twice to confirm). It clears the roll list without changing any leaderboard scores; rolls still in progress stay. `/dw clear` works the same way.
+
 ## v0.1.3
 
 - 67 announcements now trigger when anyone in the group rolls a 67, and everyone with DungeonWinner announces it.

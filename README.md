@@ -47,7 +47,7 @@ You should end up with `AddOns\DungeonWinner\DungeonWinner.toc`. Keep the folder
 | `/dw settings` | Open the settings (also in Esc > Options > AddOns > DungeonWinner) |
 | `/dw minimap` | Show or hide the minimap button |
 | `/dw test` | Show sample rolls, handy for sizing and placing the window |
-| `/dw clear` | Clear the roll history |
+| `/dw clear` | Clear the roll list (same as the Clear button; leaderboard scores are kept) |
 | `/dw auto` | Turn the automatic pop-up on or off |
 
 ## Reporting bugs
