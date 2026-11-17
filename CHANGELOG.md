@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.9
+
+- New setting: Collapse rolls when finished (on by default). Folds an item's roll list as soon as someone wins it; the winner still shows on the item.
+
 ## v0.1.8
 
 - New setting: Open when entering a dungeon (on by default). Shows the leaderboard when a new dungeon run starts.

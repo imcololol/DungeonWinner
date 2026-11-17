@@ -509,11 +509,13 @@ local function HandleMessage(def, f, isTest)
         item.winner = who
         item.done = true
         VendorPrice(item)
+        if Setting("collapseWon") and not isTest then item.collapsed = true end
 
     elseif def.kind == "allpassed" then
         local item = FindItem(id, f.item)
         item.allPassed = true
         item.done = true
+        if Setting("collapseWon") and not isTest then item.collapsed = true end
     end
 end
 
@@ -1447,7 +1449,7 @@ local UpdateMinimapButton -- defined in the minimap section below
 local RunTest             -- defined in the test section below
 
 local settings = CreateFrame("Frame", "DungeonWinnerSettings", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-local SETTINGS_BASE_H = 388
+local SETTINGS_BASE_H = 432
 settings:SetSize(300, SETTINGS_BASE_H)
 settings:SetPoint("CENTER", 0, 80)
 settings:SetFrameStrata("DIALOG")
@@ -1536,6 +1538,11 @@ AddCheck(-298, "Open when entering a dungeon",
     function() return Setting("openOnDungeon") end,
     function(v) DungeonWinnerDB.settings.openOnDungeon = v end,
     "Shows the leaderboard when a new dungeon run starts")
+
+AddCheck(-342, "Collapse rolls when finished",
+    function() return Setting("collapseWon") end,
+    function(v) DungeonWinnerDB.settings.collapseWon = v end,
+    "Folds an item's roll list once someone wins it")
 
 settings:SetScript("OnShow", function()
     for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
@@ -1728,8 +1735,8 @@ themeNext:SetScript("OnClick", function() StepTheme(1) end)
 
 function PositionThemePicker()
     local p = CurrentTheme().pad
-    Anchor(themeLabel, "TOPLEFT", 16 + p, -351 - p)
-    Anchor(themeNext, "TOPRIGHT", -12 - p, -346 - p)
+    Anchor(themeLabel, "TOPLEFT", 16 + p, -395 - p)
+    Anchor(themeNext, "TOPRIGHT", -12 - p, -390 - p)
     themeBox:ClearAllPoints()
     themeBox:SetPoint("RIGHT", themeNext, "LEFT", -2, 0)
     themePrev:ClearAllPoints()
@@ -1794,6 +1801,9 @@ local function RegisterBlizzardSettings()
             function() Render() end)
 
         Header("Appearance")
+        Check(st, "collapseWon", "Collapse rolls when finished", true,
+            "Folds an item's roll list as soon as someone wins it (or everyone passes).\nThe winner still shows on the item; click it to open the list again.",
+            function() Render() end)
         Check(st, "firstNameOnly", "Only show first names", false,
             "Hides last names in the roll list and leaderboard.",
             function() Render() end)
@@ -2134,6 +2144,7 @@ events:SetScript("OnEvent", function(_, event, ...)
             if st.theme == nil or not THEMES[st.theme] then st.theme = "minimal" end
             if st.announce67 == nil then st.announce67 = true end
             if st.openOnDungeon == nil then st.openOnDungeon = true end
+            if st.collapseWon == nil then st.collapseWon = true end
             st.minimap = st.minimap or { angle = 225 }
             if st.showMinimap == nil then st.showMinimap = not st.minimap.hide end
             st.minimap.hide = nil
