@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.7
+
+- New versions now go to CurseForge automatically when they're released on GitHub.
+- The addon now includes its CurseForge project ID, so addon managers can match it to the CurseForge page.
+
 ## v0.1.6
 
 - Runs now stay in the run list until you log out, even through /reload.
