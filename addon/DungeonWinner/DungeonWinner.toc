@@ -5,5 +5,6 @@
 ## IconAtlas: lootroll-toast-icon-need-up
 ## Version: 0.1.0
 ## SavedVariables: DungeonWinnerDB
+## X-Curse-Project-ID: 1811569
 
 DungeonWinner.lua
