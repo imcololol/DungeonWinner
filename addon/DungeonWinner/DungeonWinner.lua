@@ -989,7 +989,7 @@ end
 
 local board = CreateFrame("Frame", nil, frame)
 board:SetPoint("TOPLEFT", 6, -53)
-board:SetPoint("BOTTOMRIGHT", -6, 18)
+board:SetPoint("BOTTOMRIGHT", -6, 30)
 board:Hide()
 
 board.title = board:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1231,6 +1231,59 @@ local function GetBoardRow(i)
     return r
 end
 
+
+-- Share button (bottom of the Leaderboard tab): posts the standings of the
+-- run you're looking at to group chat (or just to you when solo).
+local function PlainMoney(copper)
+    local g, sv, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
+    local parts = {}
+    if g > 0 then parts[#parts + 1] = g .. "g" end
+    if sv > 0 then parts[#parts + 1] = sv .. "s" end
+    if c > 0 or #parts == 0 then parts[#parts + 1] = c .. "c" end
+    return table.concat(parts, " ")
+end
+
+local MAX_SHARE_LINES = 5
+
+local function ShareBoard()
+    local run = board.viewRun
+    if not run then return end
+    local prices = (Setting("useAH") and AuctionatorReady()) and "AH prices" or "vendor prices"
+    local lines = { ("DungeonWinner - %s (Greed wins, %s):"):format(run.name or "Run", prices) }
+    local ranked = 0
+    for _, sc in ipairs(ComputeLeaderboard(run)) do
+        if sc.count > 0 and ranked < MAX_SHARE_LINES then
+            ranked = ranked + 1
+            lines[#lines + 1] = ("%d. %s - %s (%d %s)"):format(ranked, sc.name,
+                sc.total > 0 and PlainMoney(sc.total) or "no price",
+                sc.count, sc.count == 1 and "item" or "items")
+        end
+    end
+    if ranked == 0 then lines[#lines + 1] = "No Greed wins yet." end
+
+    local channel = GroupChannel()
+    local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+    for _, line in ipairs(lines) do
+        if channel then
+            local ok = pcall(send, line, channel)
+            if not ok then Print(line) end
+        else
+            Print(line) -- not in a group: show it to you
+        end
+    end
+end
+
+board.share = BoardButton(60)
+board.share:SetPoint("TOPLEFT", board, "BOTTOMLEFT", 2, -5)
+board.share.text:SetText("Share")
+board.share:SetScript("OnClick", ShareBoard)
+board.share:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine("Post these standings to group chat", 1, 1, 1)
+    GameTooltip:Show()
+end)
+board.share:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
 local function RenderBoard()
     for _, r in ipairs(boardRows) do r:Hide() end
     local run
@@ -1252,6 +1305,8 @@ local function RenderBoard()
         board.sub:SetText("Enter a dungeon, or click Start run.")
         board.empty:Hide()
         board.reset:Hide()
+        board.viewRun = nil
+        board.share:Hide()
         return
     end
 
@@ -1263,6 +1318,8 @@ local function RenderBoard()
     board.title:SetText((run.name or "Dungeon") .. (isCurrent and "" or " |cff888888(past run)|r"))
     board.sub:SetText("Greed wins only - " .. prices .. " - " .. status)
 
+    board.viewRun = run
+    board.share:Show()
     local list = ComputeLeaderboard(run)
     board.empty:SetShown(#list == 0)
     board.empty:SetText("No Greed wins yet.")
@@ -1533,7 +1590,7 @@ local function ApplyTheme()
     Anchor(scroll, "TOPLEFT", 6 + p, -53 - p, "BOTTOMRIGHT", -16 - p, 16 + p)
     Anchor(bar, "TOPRIGHT", -6 - p, -55 - p, "BOTTOMRIGHT", -6 - p, 18 + p)
     bar:GetThumbTexture():SetVertexColor(ar, ag, ab, 1)
-    Anchor(board, "TOPLEFT", 6 + p, -53 - p, "BOTTOMRIGHT", -6 - p, 18 + p)
+    Anchor(board, "TOPLEFT", 6 + p, -53 - p, "BOTTOMRIGHT", -6 - p, 30 + p)
     Anchor(grip, "BOTTOMRIGHT", -2 - p, 2 + p)
 
     -- Settings window
