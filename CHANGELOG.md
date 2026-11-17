@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.10
+
+- Fix: last names were missing for group members. DungeonWinner now joins Forever's first and last names, and prefers the full name when chat shows it.
+
 ## v0.1.9
 
 - Fix: names were cut to first names even with "Only show first names" off.

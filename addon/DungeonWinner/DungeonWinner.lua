@@ -7,7 +7,7 @@
 
 local ADDON_NAME = ...
 local MAX_HISTORY = 300
-local playerName = UnitName("player")
+local playerName = UnitName("player") -- replaced with the full "First Last" name at ADDON_LOADED
 local debugMode = false
 
 -- Developer options (/dw debug) only unlock for this BattleTag.
@@ -51,18 +51,37 @@ local function CleanName(name)
     return name
 end
 
+-- Forever names are "First Last". The game hands addons the last name
+-- separately (in the slot that used to hold the realm), so join them back up.
+local function UnitDisplayName(unit)
+    local first, second = UnitName(unit)
+    if first and second and second ~= "" then
+        return first .. " " .. second
+    end
+    return first
+end
+
+-- Same person? Exact match, or one is just the first name of the other
+-- (players can hide their last name in the world, but chat still shows it).
+local function NamesMatch(a, b)
+    if not a or not b then return false end
+    if a == b then return true end
+    local fa, fb = a:match("^(%S+)"), b:match("^(%S+)")
+    return (a == fb and b:find(" ", 1, true) ~= nil) or (b == fa and a:find(" ", 1, true) ~= nil)
+end
+
 local ForEachGroupMember -- defined just below
 
 -- Find a player's class: yourself, then by name, then by scanning the group
 -- (the scan catches players from other realms, whose names don't look up directly)
 local function ClassOf(name)
     if not name then return nil end
-    if name == playerName then return select(2, UnitClass("player")) end
+    if NamesMatch(name, playerName) then return select(2, UnitClass("player")) end
     local _, class = UnitClass(name)
     if class then return class end
     if IsInGroup() then
         ForEachGroupMember(function(unit)
-            if not class and UnitName(unit) == name then
+            if not class and NamesMatch(UnitDisplayName(unit), name) then
                 class = select(2, UnitClass(unit))
             end
         end)
@@ -118,14 +137,18 @@ end
 
 local function GroupKey(name)
     if not name then return nil end
-    if SameName(name, playerName) then return playerName end
+    local function Longer(a, b) return (#a >= #b) and a or b end
+    if SameName(name, playerName) then
+        playerName = Longer(playerName, name) -- learn our own full name from chat if needed
+        return playerName
+    end
     local key = name
     if IsInGroup() then
         local found = false
         ForEachGroupMember(function(unit)
-            local n = UnitName(unit)
-            if not found and SameName(name, n) then
-                key, found = n, true
+            local n = UnitDisplayName(unit)
+            if not found and n and SameName(name, n) then
+                key, found = Longer(name, n), true -- full name wins
             end
         end)
     end
@@ -367,7 +390,7 @@ local function NewItem(link, name, icon)
     }
     if IsInGroup() then
         ForEachGroupMember(function(unit)
-            local n = UnitName(unit)
+            local n = UnitDisplayName(unit)
             if n then item.rolls[n] = { class = select(2, UnitClass(unit)) } end
         end)
     end
@@ -400,7 +423,16 @@ end
 local function GetEntry(item, who)
     local r = item.rolls[who]
     if not r then
-        r = { class = ClassOf(who) }
+        for k, v in pairs(item.rolls) do
+            if k ~= who and NamesMatch(k, who) then
+                -- same person listed as "Smelly" and "Smelly Man": keep the full name
+                r = v
+                item.rolls[k] = nil
+                if item.winner == k then item.winner = who end
+                break
+            end
+        end
+        r = r or { class = ClassOf(who) }
         item.rolls[who] = r
     end
     return r
@@ -999,9 +1031,13 @@ local function ComputeLeaderboard(run)
     local live = not run.test and (ManualActive() and run == DungeonWinnerDB.run or (inDungeon and not run.manual))
     if live and IsInGroup() then
         ForEachGroupMember(function(unit)
-            local n = UnitName(unit)
-            if n and not scores[n] then
-                scores[n] = { name = n, total = 0, count = 0, class = select(2, UnitClass(unit)) }
+            local n = UnitDisplayName(unit)
+            local known
+            for existing in pairs(scores) do
+                if NamesMatch(existing, n) then known = true end
+            end
+            if n and not known then
+                scores[n] = { name = n, total = 0, count = 0, class = select(2, UnitClass(unit)), items = {}, unpriced = 0 }
                 list[#list + 1] = scores[n]
             end
         end)
@@ -2156,7 +2192,7 @@ events:SetScript("OnEvent", function(_, event, ...)
             st.minimap = st.minimap or { angle = 225 }
             if st.showMinimap == nil then st.showMinimap = not st.minimap.hide end
             st.minimap.hide = nil
-            playerName = UnitName("player")
+            playerName = UnitDisplayName("player")
             -- Anything left open from last session is finished; fold it away
             for _, item in ipairs(DungeonWinnerDB.history) do
                 item.done = true
@@ -2174,7 +2210,8 @@ events:SetScript("OnEvent", function(_, event, ...)
             Print("START_LOOT_ROLL", ...)
             -- Show how the game names group members, to compare with chat names
             ForEachGroupMember(function(unit)
-                Print("  group:", unit, "=", "[" .. tostring(UnitName(unit)) .. "]")
+                local a, b = UnitName(unit)
+                Print("  group:", unit, "= [" .. tostring(a) .. "] [" .. tostring(b) .. "]")
             end)
         end
         OnStartRoll(...)
@@ -2276,6 +2313,21 @@ SlashCmdList.DUNGEONWINNER = function(msg)
                 end
             end
         end
+    elseif msg == "names" then
+        if not IsDeveloper() then
+            Print("That command is for the addon developer only.")
+        else
+            local function Show(unit)
+                local a, b = UnitName(unit)
+                local fa, fb = nil, nil
+                if UnitFullName then fa, fb = UnitFullName(unit) end
+                local g = GetUnitName and GetUnitName(unit, true)
+                Print(("%s: UnitName=[%s][%s] UnitFullName=[%s][%s] GetUnitName=[%s] -> DungeonWinner uses [%s]")
+                    :format(unit, tostring(a), tostring(b), tostring(fa), tostring(fb), tostring(g), tostring(UnitDisplayName(unit))))
+            end
+            ForEachGroupMember(Show)
+            if not IsInGroup() then Show("player") end
+        end
     elseif msg == "where" then
         local inInstance, instanceType = IsInInstance()
         local name, infoType, difficultyID, difficultyName, maxPlayers, _, _, instanceID = GetInstanceInfo()
@@ -2292,7 +2344,7 @@ SlashCmdList.DUNGEONWINNER = function(msg)
         end
     elseif msg == "help" then
         if IsDeveloper() then
-            Print("/dw - toggle window | board | start [name] | stop | settings | test | clear | auto | minimap | dev: debug, 67, dump")
+            Print("/dw - toggle window | board | start [name] | stop | settings | test | clear | auto | minimap | dev: debug, 67, dump, names")
         else
             Print("/dw - toggle window | board | settings | test | clear | auto | minimap")
         end
