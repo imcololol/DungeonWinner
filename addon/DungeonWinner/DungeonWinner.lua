@@ -426,13 +426,15 @@ local function AuctionPrice(item)
     return ok and price or nil
 end
 
+-- Value of the whole drop: price per item x stack size (e.g. 193 arrows)
 local function ItemValue(item)
+    local count = item.count or 1
     if Setting("useAH") then
         local p = AuctionPrice(item)
-        if p then return p, "Auctionator" end
+        if p then return p * count, "Auctionator" end
     end
     local v = VendorPrice(item)
-    if v then return v, "vendor" end
+    if v then return v * count, "vendor" end
     return nil
 end
 
@@ -536,12 +538,13 @@ end
 local function OnStartRoll(rollID, rollTime)
     if not IsActive() then return end
     local link = GetLootRollItemLink(rollID)
-    local icon, name = GetLootRollItemInfo(rollID)
+    local icon, name, count = GetLootRollItemInfo(rollID)
     -- Fold away finished items so the new roll(s) are easy to see
     for _, old in ipairs(DungeonWinnerDB.history) do
         if old.done then old.collapsed = true end
     end
     local item = NewItem(link, name, icon)
+    item.count = (count and count > 1) and count or nil -- stack size, e.g. 193 arrows
     -- Safety net: close the entry if we never see a "won"/"everyone passed" line
     local seconds = (rollTime or 60000) / 1000 + 30
     C_Timer.After(seconds, function()
@@ -886,7 +889,8 @@ local function FillCard(c, item)
     c.toggle:SetTexture(item.collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up")
     c.iconBorder:SetColorTexture(QualityColor(item))
     c.icon:SetTexture(item.icon or 134400)
-    c.name:SetText(item.link or item.name or "?")
+    local stack = (item.count and item.count > 1) and (" |cffffffffx" .. item.count .. "|r") or ""
+    c.name:SetText((item.link or item.name or "?") .. stack)
 
     local total, chosen = 0, 0
     for _, e in pairs(item.rolls) do
@@ -1904,7 +1908,7 @@ function RunTest()
                 local info = C_Container.GetContainerItemInfo(bag, slot)
                 if info and info.hyperlink and info.itemID and not seen[info.itemID] then
                     seen[info.itemID] = true
-                    testItems[#testItems + 1] = { info.hyperlink, info.itemName or "" }
+                    testItems[#testItems + 1] = { info.hyperlink, info.itemName or "", info.stackCount }
                 end
             end
         end
@@ -1967,8 +1971,9 @@ function RunTest()
 
     -- Simulates one full roll with random choices and random numbers,
     -- sending the same chat lines the game would, in a shuffled order.
-    local function SimulateRoll(link, name)
+    local function SimulateRoll(link, name, count)
         local it = NewItem(link, name, nil)
+        it.count = (count and count > 1) and count or nil
         it.test = true
         it.runId = testRun.id
         items[#items + 1] = it
@@ -2041,7 +2046,7 @@ function RunTest()
         end
     end
 
-    for _, t in ipairs(testItems) do SimulateRoll(t[1], t[2]) end
+    for _, t in ipairs(testItems) do SimulateRoll(t[1], t[2], t[3]) end
 
     -- Fake players aren't in your group, so give them classes to show the colors
     for i, it in ipairs(items) do
