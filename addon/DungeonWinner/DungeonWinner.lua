@@ -100,7 +100,24 @@ local function Setting(key)
     return DungeonWinnerDB and DungeonWinnerDB.settings and DungeonWinnerDB.settings[key]
 end
 
+-- If we only have a first name ("Skinny") and someone in the group has that
+-- first name, show their full name ("Skinny Beans"). Fixes rolls that were
+-- saved with short names.
+local function ResolveFullName(name)
+    if not name or name:find(" ", 1, true) then return name end
+    if playerName and #playerName > #name and NamesMatch(name, playerName) then return playerName end
+    local best
+    if IsInGroup() then
+        ForEachGroupMember(function(unit)
+            local n = UnitDisplayName(unit)
+            if n and #n > #name and NamesMatch(name, n) then best = n end
+        end)
+    end
+    return best or name
+end
+
 local function ColorName(name, class)
+    name = ResolveFullName(name)
     if Setting("firstNameOnly") == true then name = name:match("^(%S+)") or name end
     local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
     if not c then return name end
@@ -1002,6 +1019,7 @@ local function ComputeLeaderboard(run)
     if not run then return list end
 
     local function Entry(name, class)
+        name = ResolveFullName(name) -- "Skinny" and "Skinny Beans" count as one player
         local s = scores[name]
         if not s then
             s = { name = name, total = 0, count = 0, class = class, items = {}, unpriced = 0 }
@@ -1344,7 +1362,7 @@ local function ShareBoard()
     for _, sc in ipairs(ComputeLeaderboard(run)) do
         if sc.count > 0 and ranked < MAX_SHARE_LINES then
             ranked = ranked + 1
-            lines[#lines + 1] = ("%d. %s - %s (%d %s)"):format(ranked, sc.name,
+            lines[#lines + 1] = ("%d. %s - %s (%d %s)"):format(ranked, ResolveFullName(sc.name),
                 sc.total > 0 and PlainMoney(sc.total) or "no price",
                 sc.count, sc.count == 1 and "item" or "items")
         end
@@ -2222,6 +2240,9 @@ events:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         if event == "PLAYER_ENTERING_WORLD" then
             local isInitialLogin = ...
+            -- At ADDON_LOADED the game may not know our last name yet
+            local full = UnitDisplayName("player")
+            if full and #full > #(playerName or "") then playerName = full end
             -- A real login starts a new session; /reload keeps the current one
             if isInitialLogin then
                 DungeonWinnerDB.sessionStart = time()
