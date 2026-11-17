@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.6
+
+- Fix: dungeon runs didn't start automatically in some dungeons (like Uldaman). Dungeon detection is more forgiving and re-checks a few seconds after you zone in.
+- `/dw where` shows what the game reports about your current zone (handy for bug reports).
+
 ## v0.1.5
 
 - The loot-roll dice icon now shows next to DungeonWinner in the game's AddOns list.

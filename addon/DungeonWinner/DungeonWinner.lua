@@ -236,9 +236,23 @@ local RUN_RESUME_SECONDS = 15 * 60
 local inDungeon = false
 local showingTest = false -- leaderboard shows /dw test data until real loot arrives
 
-local function InDungeon()
+-- What kind of instance are we in? "dungeon", "raid" or nil.
+-- Checks both IsInInstance and GetInstanceInfo, and doesn't insist on one
+-- exact type name, because Forever may label its dungeons differently
+-- from the modern game (e.g. Uldaman wasn't recognised as "party").
+local function InstanceKind()
     local inInstance, instanceType = IsInInstance()
-    return inInstance and instanceType == "party"
+    local _, infoType, _, _, maxPlayers = GetInstanceInfo()
+    local kind = instanceType
+    if kind == nil or kind == "none" then kind = infoType end
+    if not inInstance and (kind == nil or kind == "none") then return nil end
+    if kind == "pvp" or kind == "arena" then return nil end
+    if kind == "raid" or (maxPlayers and maxPlayers > 5) then return "raid" end
+    return "dungeon" -- "party", "scenario", or whatever Forever calls its 5-player dungeons
+end
+
+local function InDungeon()
+    return InstanceKind() == "dungeon"
 end
 
 local function StartRun(name, instanceID, isTest, manual)
@@ -480,8 +494,7 @@ end
 -- "Active everywhere" off (default): only record rolls inside dungeons and raids
 local function IsActive()
     if Setting("activeEverywhere") or ManualActive() then return true end
-    local inInstance, instanceType = IsInInstance()
-    return inInstance and (instanceType == "party" or instanceType == "raid")
+    return InstanceKind() ~= nil
 end
 
 local function OnLootMessage(msg, force)
@@ -1922,6 +1935,8 @@ events:SetScript("OnEvent", function(_, event, ...)
         OnLootMessage(msg)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         CheckInstance()
+        -- Instance info isn't always ready the moment you zone in; check again shortly after
+        C_Timer.After(3, CheckInstance)
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         -- item prices arrived; refresh once shortly after (this event fires a lot)
         if frame:IsShown() and not refreshQueued then
@@ -1987,6 +2002,13 @@ SlashCmdList.DUNGEONWINNER = function(msg)
         else
             Announce67()
         end
+    elseif msg == "where" then
+        local inInstance, instanceType = IsInInstance()
+        local name, infoType, difficultyID, difficultyName, maxPlayers, _, _, instanceID = GetInstanceInfo()
+        Print(("Zone: %s | IsInInstance: %s, %s | GetInstanceInfo type: %s, max players: %s, difficulty: %s (%s), id: %s")
+            :format(tostring(name), tostring(inInstance), tostring(instanceType), tostring(infoType),
+                tostring(maxPlayers), tostring(difficultyName), tostring(difficultyID), tostring(instanceID)))
+        Print("DungeonWinner sees this as: " .. (InstanceKind() or "not an instance"))
     elseif msg == "debug" then
         if not IsDeveloper() then
             Print("That command is for the addon developer only.")
