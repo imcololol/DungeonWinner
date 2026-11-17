@@ -2,6 +2,7 @@
 ## Title: DungeonWinner
 ## Notes: Shows everyone's Need/Greed/Pass choices and roll numbers in one list.
 ## Author: Cole
+## IconAtlas: lootroll-toast-icon-need-up
 ## Version: 0.1.0
 ## SavedVariables: DungeonWinnerDB
 
