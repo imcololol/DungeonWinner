@@ -1,8 +1,11 @@
-# When you publish a Release on GitHub, this zips addon/DungeonWinner
-# and attaches it to the release as DungeonWinner-<tag>-forever.zip
+# Builds DungeonWinner-<tag>-forever.zip and attaches it to a GitHub release.
+# Runs when a version tag (like v0.1.4) is pushed, which also creates the
+# release, or when a release is published by hand on GitHub.
 name: Package release
 
 on:
+  push:
+    tags: ['v*']
   release:
     types: [published]
 
@@ -25,7 +28,15 @@ jobs:
           cd addon
           zip -r "../DungeonWinner-${GITHUB_REF_NAME}-forever.zip" DungeonWinner
 
-      - name: Attach zip to the release
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v tag="## ${GITHUB_REF_NAME}" '$0==tag{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "See CHANGELOG.md" > notes.md; fi
+
+      - name: Create or update the release and attach the zip
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: notes.md
           files: DungeonWinner-*-forever.zip
