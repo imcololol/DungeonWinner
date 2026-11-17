@@ -45,7 +45,9 @@ local function CleanName(name)
     if not name then return nil end
     name = name:gsub("|H.-|h(.-)|h", "%1"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     if YOU and name == YOU then return playerName end
-    if Ambiguate then name = Ambiguate(name, "short") end
+    -- Strip a "-Realm" suffix only. (Ambiguate isn't used: on Forever it can
+    -- treat the last name like a realm and cut "Smelly Man" down to "Smelly".)
+    name = name:gsub("%-[^%s%-]+$", "")
     return name
 end
 
@@ -68,12 +70,19 @@ local function ClassOf(name)
     return class
 end
 
+local blizzSettings = {} -- key -> Blizzard setting object (filled in when the Options page registers)
+
 local function Setting(key)
+    local bs = blizzSettings[key]
+    if bs and bs.GetValue then
+        local ok, v = pcall(bs.GetValue, bs)
+        if ok and v ~= nil then return v end
+    end
     return DungeonWinnerDB and DungeonWinnerDB.settings and DungeonWinnerDB.settings[key]
 end
 
 local function ColorName(name, class)
-    if Setting("firstNameOnly") then name = name:match("^(%S+)") or name end
+    if Setting("firstNameOnly") == true then name = name:match("^(%S+)") or name end
     local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
     if not c then return name end
     return ("|cff%02x%02x%02x%s|r"):format(math.floor(c.r * 255), math.floor(c.g * 255), math.floor(c.b * 255), name)
@@ -1757,7 +1766,6 @@ settings:HookScript("OnHide", function() themeMenu:Hide() end)
 ---------------------------------------------------------------------------
 
 local blizzCategory
-local blizzSettings = {} -- key -> Blizzard setting object, to sync from slash commands
 
 local function RegisterBlizzardSettings()
     if not (Settings and Settings.RegisterVerticalLayoutCategory and Settings.RegisterAddOnSetting
@@ -2252,6 +2260,22 @@ SlashCmdList.DUNGEONWINNER = function(msg)
         else
             Announce67()
         end
+    elseif msg == "settings dump" or msg == "dump" then
+        if not IsDeveloper() then
+            Print("That command is for the addon developer only.")
+        else
+            for key, v in pairs(DungeonWinnerDB.settings) do
+                local panel = "-"
+                local bs = blizzSettings[key]
+                if bs and bs.GetValue then
+                    local ok, pv = pcall(bs.GetValue, bs)
+                    panel = ok and tostring(pv) or "error"
+                end
+                if type(v) ~= "table" then
+                    Print(("%s = %s (%s) | options page: %s"):format(key, tostring(v), type(v), panel))
+                end
+            end
+        end
     elseif msg == "where" then
         local inInstance, instanceType = IsInInstance()
         local name, infoType, difficultyID, difficultyName, maxPlayers, _, _, instanceID = GetInstanceInfo()
@@ -2268,7 +2292,7 @@ SlashCmdList.DUNGEONWINNER = function(msg)
         end
     elseif msg == "help" then
         if IsDeveloper() then
-            Print("/dw - toggle window | board | start [name] | stop | settings | test | clear | auto | minimap | dev: debug, 67")
+            Print("/dw - toggle window | board | start [name] | stop | settings | test | clear | auto | minimap | dev: debug, 67, dump")
         else
             Print("/dw - toggle window | board | settings | test | clear | auto | minimap")
         end

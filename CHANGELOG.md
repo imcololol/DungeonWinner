@@ -2,6 +2,7 @@
 
 ## v0.1.9
 
+- Fix: names were cut to first names even with "Only show first names" off.
 - New setting: Collapse rolls when finished (on by default). Folds an item's roll list as soon as someone wins it; the winner still shows on the item.
 
 ## v0.1.8
