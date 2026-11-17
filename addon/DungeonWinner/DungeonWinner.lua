@@ -51,12 +51,35 @@ local function CleanName(name)
     return name
 end
 
+-- Remembered full names: first name -> "First Last". Saved, so rolls stored
+-- with only a first name still show the full name later, even solo.
+-- If two different people share a first name it's marked false and never guessed.
+local function LearnName(full)
+    if not full or not DungeonWinnerDB or not full:find(" ", 1, true) then return end
+    DungeonWinnerDB.fullNames = DungeonWinnerDB.fullNames or {}
+    local first = full:match("^(%S+)")
+    local known = DungeonWinnerDB.fullNames[first]
+    if known == nil then
+        DungeonWinnerDB.fullNames[first] = full
+    elseif known and known ~= full then
+        DungeonWinnerDB.fullNames[first] = false -- ambiguous: two people called this
+    end
+end
+
+local function KnownFullName(first)
+    local map = DungeonWinnerDB and DungeonWinnerDB.fullNames
+    local full = map and map[first]
+    return full or nil
+end
+
 -- Forever names are "First Last". The game hands addons the last name
 -- separately (in the slot that used to hold the realm), so join them back up.
 local function UnitDisplayName(unit)
     local first, second = UnitName(unit)
     if first and second and second ~= "" then
-        return first .. " " .. second
+        local full = first .. " " .. second
+        LearnName(full)
+        return full
     end
     return first
 end
@@ -106,6 +129,8 @@ end
 local function ResolveFullName(name)
     if not name or name:find(" ", 1, true) then return name end
     if playerName and #playerName > #name and NamesMatch(name, playerName) then return playerName end
+    local known = KnownFullName(name)
+    if known then return known end
     local best
     if IsInGroup() then
         ForEachGroupMember(function(unit)
@@ -274,6 +299,7 @@ end
 ---------------------------------------------------------------------------
 
 local Render    -- defined in the UI section
+local NormalizeSavedNames -- defined in the data section
 local ShowBoard -- defined in the UI section: opens the window on the Leaderboard tab
 
 ---------------------------------------------------------------------------
@@ -437,7 +463,37 @@ local function FindItem(id, link, pred)
     return fallback or NewItem(link)
 end
 
+-- Merge rolls saved under a first name into the full-name entry, using
+-- every full name we've ever seen (from saved rolls and from groups).
+function NormalizeSavedNames()
+    local hist = DungeonWinnerDB.history
+    for _, item in ipairs(hist) do
+        for name in pairs(item.rolls) do LearnName(name) end
+    end
+    LearnName(playerName)
+    for _, item in ipairs(hist) do
+        local shortNames = {}
+        for name in pairs(item.rolls) do
+            if not name:find(" ", 1, true) and KnownFullName(name) then shortNames[#shortNames + 1] = name end
+        end
+        for _, short in ipairs(shortNames) do
+            local full = KnownFullName(short)
+            local a, b = item.rolls[short], item.rolls[full]
+            if b then
+                b.choice = b.choice or a.choice
+                b.roll = b.roll or a.roll
+                b.class = b.class or a.class
+            else
+                item.rolls[full] = a
+            end
+            item.rolls[short] = nil
+            if item.winner == short then item.winner = full end
+        end
+    end
+end
+
 local function GetEntry(item, who)
+    LearnName(who)
     local r = item.rolls[who]
     if not r then
         for k, v in pairs(item.rolls) do
@@ -2217,6 +2273,7 @@ events:SetScript("OnEvent", function(_, event, ...)
                 item.collapsed = true
             end
             RestoreLayout()
+            NormalizeSavedNames()
             DungeonWinnerDB.runs = DungeonWinnerDB.runs or {}
             if DungeonWinnerDB.run then RememberRun(DungeonWinnerDB.run) end
             UpdateMinimapButton()

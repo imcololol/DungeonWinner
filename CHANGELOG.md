@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.11
+
+- Fix: after logging back in, players from earlier runs could show twice on the leaderboard ("Meddle" and "Meddle Floyd"). DungeonWinner now remembers full names and merges them, even when you're solo.
+
 ## v0.1.10
 
 - Rolls saved with only a first name now show the group member's full name, and your own last name is picked up after login.
