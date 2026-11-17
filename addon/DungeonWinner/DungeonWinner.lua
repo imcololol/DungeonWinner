@@ -255,6 +255,22 @@ local function InDungeon()
     return InstanceKind() == "dungeon"
 end
 
+-- Every real run is also kept in DungeonWinnerDB.runs (newest first) so the
+-- leaderboard dropdown can show earlier runs from this play session.
+local MAX_RUNS = 25
+local sessionStart = time()
+local selectedRunId -- nil = show the current run
+
+local function RememberRun(run)
+    DungeonWinnerDB.runs = DungeonWinnerDB.runs or {}
+    local runs = DungeonWinnerDB.runs
+    for i, r in ipairs(runs) do
+        if r.id == run.id then runs[i] = run; return end
+    end
+    table.insert(runs, 1, run)
+    while #runs > MAX_RUNS do table.remove(runs) end
+end
+
 local function StartRun(name, instanceID, isTest, manual)
     local now = time()
     local run = {
@@ -266,7 +282,9 @@ local function StartRun(name, instanceID, isTest, manual)
         showingTest = true
     else
         DungeonWinnerDB.run = run
+        RememberRun(run)
         showingTest = false
+        selectedRunId = nil -- jump the leaderboard to the new run
     end
     return run
 end
@@ -975,7 +993,7 @@ board:SetPoint("BOTTOMRIGHT", -6, 18)
 board:Hide()
 
 board.title = board:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-board.title:SetPoint("TOPLEFT", 4, -4)
+board.title:SetPoint("TOPLEFT", 20, -4)
 board.title:SetJustifyH("LEFT")
 board.title:SetWordWrap(false)
 
@@ -1040,6 +1058,83 @@ end)
 
 -- keep the run name clear of the buttons
 board.title:SetPoint("RIGHT", board.toggle, "LEFT", -6, 0)
+
+-- Run picker: click the run name to choose any run from this session
+board.pick = CreateFrame("Button", nil, board)
+board.pick:SetPoint("TOPLEFT", board, "TOPLEFT", 0, 0)
+board.pick:SetPoint("RIGHT", board.toggle, "LEFT", -6, 0)
+board.pick:SetHeight(20)
+board.pick:SetHighlightTexture("Interface\\Buttons\\WHITE8x8")
+board.pick:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
+board.arrow = board.pick:CreateTexture(nil, "ARTWORK")
+board.arrow:SetSize(16, 16)
+board.arrow:SetPoint("LEFT", 2, -1)
+board.arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+
+board.menu = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
+board.menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+board.menu:SetBackdropColor(0.06, 0.06, 0.08, 0.98)
+board.menu:SetBackdropBorderColor(0.35, 0.35, 0.4, 1)
+board.menu:SetPoint("TOPLEFT", board.pick, "BOTTOMLEFT", 0, -2)
+board.menu:SetFrameStrata("DIALOG")
+board.menu:Hide()
+board:HookScript("OnHide", function() board.menu:Hide() end)
+
+local menuItems = {}
+
+local function SessionRuns()
+    local list = {}
+    for _, run in ipairs(DungeonWinnerDB.runs or {}) do
+        if run == DungeonWinnerDB.run or (run.started or 0) >= sessionStart then
+            list[#list + 1] = run
+        end
+    end
+    return list
+end
+
+local function RunLabel(run)
+    local label = (run.name or "Run") .. " |cff888888" .. date("%H:%M", run.started or time()) .. "|r"
+    if run == DungeonWinnerDB.run then label = label .. " |cff33ff99(current)|r" end
+    return label
+end
+
+local function OpenRunMenu()
+    local runs = SessionRuns()
+    for _, b in ipairs(menuItems) do b:Hide() end
+    local width = 200
+    for i, run in ipairs(runs) do
+        local b = menuItems[i]
+        if not b then
+            b = CreateFrame("Button", nil, board.menu)
+            b:SetHeight(20)
+            b:SetHighlightTexture("Interface\\Buttons\\WHITE8x8")
+            b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.08)
+            b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            b.text:SetPoint("LEFT", 6, 0)
+            b.text:SetJustifyH("LEFT")
+            b:SetScript("OnClick", function(self)
+                selectedRunId = (self.run ~= DungeonWinnerDB.run) and self.run.id or nil
+                showingTest = false
+                board.menu:Hide()
+                Render()
+            end)
+            menuItems[i] = b
+        end
+        b.run = run
+        b.text:SetText(RunLabel(run))
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", 4, -4 - (i - 1) * 20)
+        b:SetPoint("RIGHT", board.menu, "RIGHT", -4, 0)
+        b:Show()
+    end
+    if #runs == 0 then return end
+    board.menu:SetSize(width, #runs * 20 + 8)
+    board.menu:Show()
+end
+
+board.pick:SetScript("OnClick", function()
+    if board.menu:IsShown() then board.menu:Hide() else OpenRunMenu() end
+end)
 
 -- Clear button on the Rolls tab. It hides rolls from the list but keeps them
 -- for the leaderboard, so clearing never changes anyone's score.
@@ -1124,24 +1219,34 @@ end
 
 local function RenderBoard()
     for _, r in ipairs(boardRows) do r:Hide() end
-    local run = showingTest and DungeonWinnerDB.testRun or DungeonWinnerDB.run
+    local run
+    if showingTest then
+        run = DungeonWinnerDB.testRun
+    elseif selectedRunId then
+        for _, r in ipairs(DungeonWinnerDB.runs or {}) do
+            if r.id == selectedRunId then run = r end
+        end
+        if not run then selectedRunId = nil end
+    end
+    run = run or (not showingTest and DungeonWinnerDB.run) or run
+    local isCurrent = run ~= nil and run == DungeonWinnerDB.run
 
     board.toggle.text:SetText(ManualActive() and "End run" or "Start run")
 
     if not run then
         board.title:SetText("No run yet")
-        board.sub:SetText("Enter a dungeon, or click Start run below.")
+        board.sub:SetText("Enter a dungeon, or click Start run.")
         board.empty:Hide()
         board.reset:Hide()
         return
     end
 
-    local live = not run.test and (ManualActive() or (inDungeon and not run.manual))
+    local live = isCurrent and not run.test and (ManualActive() or (inDungeon and not run.manual))
     local minutes = math.floor(((run.ended or run.leftAt or time()) - run.started) / 60)
     local prices = (Setting("useAH") and AuctionatorReady()) and "Auctionator prices" or "vendor prices"
     local kind = run.manual and "manual, " or ""
     local status = run.test and "test data" or (kind .. minutes .. "m, " .. (live and "in progress" or "finished"))
-    board.title:SetText(run.name or "Dungeon")
+    board.title:SetText((run.name or "Dungeon") .. (isCurrent and "" or " |cff888888(past run)|r"))
     board.sub:SetText("Greed wins only - " .. prices .. " - " .. status)
 
     local list = ComputeLeaderboard(run)
@@ -1171,7 +1276,7 @@ local function RenderBoard()
         r:Show()
         y = y + 22
     end
-    board.reset:Show()
+    board.reset:SetShown(isCurrent or run.test) -- Reset only applies to the current board
 end
 
 function Render()
@@ -1916,6 +2021,8 @@ events:SetScript("OnEvent", function(_, event, ...)
                 item.collapsed = true
             end
             RestoreLayout()
+            DungeonWinnerDB.runs = DungeonWinnerDB.runs or {}
+            if DungeonWinnerDB.run then RememberRun(DungeonWinnerDB.run) end
             UpdateMinimapButton()
             ApplyTheme()
             RegisterBlizzardSettings()

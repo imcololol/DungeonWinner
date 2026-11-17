@@ -2,6 +2,7 @@
 
 ## v0.1.6
 
+- Leaderboard run picker: click the run name at the top of the Leaderboard tab to switch between every run from this play session. New runs open automatically.
 - Fix: dungeon runs didn't start automatically in some dungeons (like Uldaman). Dungeon detection is more forgiving and re-checks a few seconds after you zone in.
 - `/dw where` shows what the game reports about your current zone (handy for bug reports).
 
