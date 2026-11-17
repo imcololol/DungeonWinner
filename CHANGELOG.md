@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.3
+
+- 67 announcements now trigger when anyone in the group rolls a 67, and everyone with DungeonWinner announces it.
+
 ## v0.1.2
 
 - Start a leaderboard run manually with the Start run button (top of the Leaderboard tab) or `/dw start [name]`, and end it with End run or `/dw stop`. Manual runs track Greed wins anywhere until you end them.

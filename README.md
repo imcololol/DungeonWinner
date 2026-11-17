@@ -11,7 +11,7 @@ A World of Warcraft: Forever addon that pops up when a Need / Greed / Pass roll 
 - Hover an item to see its tooltip
 - Keeps your last 300 rolled items between sessions
 - Works in any game language (reads Blizzard's own loot text)
-- Roll a 67 and it announces it to your group
+- When anyone rolls a 67, everyone with DungeonWinner announces it to the group
 - Minimap button: left-click for the leaderboard, right-click for settings, shift-left-click for test rolls
 - Settings: active everywhere or only in dungeons/raids (default), show first names only, use Auctionator prices instead of vendor prices, 5 window themes
 - **Leaderboard:** ranks your group by the total value of loot won on **Greed** rolls during the current dungeon run (Need wins don't count). Uses vendor prices, or Auctionator prices if you turn that on.

@@ -413,7 +413,7 @@ local function MoneyText(copper)
     return ("%dg %ds %dc"):format(math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100)
 end
 
--- Roll a 67 and the addon tells your group about it
+-- Anyone rolls a 67 and the addon tells your group about it
 local ANNOUNCE_67 = "~~~ 6 7 ~~~ ┐(°o°)┌ ~~~ 6 7 ~~~"
 
 local function GroupChannel()
@@ -457,7 +457,8 @@ local function HandleMessage(def, f, isTest)
         local r = GetEntry(item, who)
         r.choice = r.choice or def.choice
         r.roll = tonumber(f.roll)
-        if r.roll == 67 and who == playerName and not isTest and Setting("announce67") then
+        -- Anyone in the group rolls a 67 -> every DungeonWinner user in the group says it
+        if r.roll == 67 and not isTest and Setting("announce67") then
             Announce67()
         end
 
@@ -1259,7 +1260,7 @@ AddCheck(-210, "Show minimap button",
 AddCheck(-254, "Announce 67s",
     function() return Setting("announce67") end,
     function(v) DungeonWinnerDB.settings.announce67 = v end,
-    "Tells your group when you roll a 67")
+    "Tells your group when anyone rolls a 67")
 
 settings:SetScript("OnShow", function()
     for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
@@ -1507,7 +1508,7 @@ local function RegisterBlizzardSettings()
             "If hidden, bring it back with /dw minimap.",
             function() UpdateMinimapButton() end)
         Check(st, "announce67", "Announce 67s", true,
-            "When you roll a 67, tells your group:\n" .. ANNOUNCE_67)
+            "When anyone in your group rolls a 67, tells your group:\n" .. ANNOUNCE_67)
 
         Header("Leaderboard")
         Check(st, "useAH", "Use auction house prices", false,
