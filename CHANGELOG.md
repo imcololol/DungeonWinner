@@ -2,6 +2,8 @@
 
 ## v0.1.6
 
+- Runs now stay in the run list until you log out, even through /reload.
+- Reset closes the current run (it stays in the list) and starts a fresh board, instead of removing it.
 - Fix: stacks (like 193 arrows) were valued as a single item. The leaderboard now counts the whole stack, and the item shows its stack size (x193).
 - Share button at the bottom of the Leaderboard tab posts the top 5 for the run you're viewing to group chat.
 - Leaderboard run picker: click the run name at the top of the Leaderboard tab to switch between every run from this play session. New runs open automatically.

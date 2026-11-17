@@ -258,7 +258,11 @@ end
 -- Every real run is also kept in DungeonWinnerDB.runs (newest first) so the
 -- leaderboard dropdown can show earlier runs from this play session.
 local MAX_RUNS = 25
-local sessionStart = time()
+-- "This session" = since you logged in. Saved, so /reload doesn't reset it;
+-- it only resets on a real login (see PLAYER_ENTERING_WORLD below).
+local function SessionStart()
+    return DungeonWinnerDB.sessionStart or 0
+end
 local selectedRunId -- nil = show the current run
 
 local function RememberRun(run)
@@ -1026,6 +1030,13 @@ end
 
 board.reset = BoardButton(46)
 board.reset:SetHeight(24)
+board.reset:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine("Start a fresh board", 1, 1, 1)
+    GameTooltip:AddLine("The old run stays in the drop-down until you log out.", 0.7, 0.7, 0.7, true)
+    GameTooltip:Show()
+end)
+board.reset:HookScript("OnLeave", function() GameTooltip:Hide() end)
 board.reset:SetPoint("TOPRIGHT", board, "TOPRIGHT", -2, 0)
 board.reset.text:SetText("Reset")
 board.reset:SetScript("OnClick", function(self)
@@ -1044,13 +1055,21 @@ board.reset:SetScript("OnClick", function(self)
     if showingTest then
         DungeonWinnerDB.testRun = nil
         showingTest = false
-    elseif ManualActive() then
-        StartRun(DungeonWinnerDB.run.name, nil, false, true) -- fresh start, same name
+        Render()
+        return
+    end
+    -- Close the current run (it stays in the run list) and start a fresh board
+    local current = DungeonWinnerDB.run
+    local wasManual = ManualActive()
+    if current and not current.ended then current.ended = time() end
+    if wasManual then
+        StartRun("Run " .. date("%b %d, %H:%M"), nil, false, true)
     elseif InDungeon() then
         local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
         StartRun(name, instanceID)
     else
         DungeonWinnerDB.run = nil
+        selectedRunId = nil
     end
     Render()
 end)
@@ -1115,7 +1134,7 @@ local menuItems = {}
 local function SessionRuns()
     local list = {}
     for _, run in ipairs(DungeonWinnerDB.runs or {}) do
-        if run == DungeonWinnerDB.run or (run.started or 0) >= sessionStart then
+        if run == DungeonWinnerDB.run or (run.started or 0) >= SessionStart() then
             list[#list + 1] = run
         end
     end
@@ -2129,6 +2148,15 @@ events:SetScript("OnEvent", function(_, event, ...)
         if debugMode and not IsSecret(msg) then Print("CHAT_MSG_LOOT:", msg) end
         OnLootMessage(msg)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        if event == "PLAYER_ENTERING_WORLD" then
+            local isInitialLogin = ...
+            -- A real login starts a new session; /reload keeps the current one
+            if isInitialLogin then
+                DungeonWinnerDB.sessionStart = time()
+            elseif not DungeonWinnerDB.sessionStart then
+                DungeonWinnerDB.sessionStart = 0 -- first time on this version: keep every saved run visible
+            end
+        end
         CheckInstance()
         -- Instance info isn't always ready the moment you zone in; check again shortly after
         C_Timer.After(3, CheckInstance)
