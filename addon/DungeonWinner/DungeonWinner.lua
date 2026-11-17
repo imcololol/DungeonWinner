@@ -224,7 +224,8 @@ end
 -- }
 ---------------------------------------------------------------------------
 
-local Render -- defined in the UI section
+local Render    -- defined in the UI section
+local ShowBoard -- defined in the UI section: opens the window on the Leaderboard tab
 
 ---------------------------------------------------------------------------
 -- Dungeon runs: the leaderboard only counts loot won during the current
@@ -336,6 +337,7 @@ local function CheckInstance()
         if not run or run.instanceID ~= instanceID or stale then
             StartRun(name, instanceID)
             Print("Tracking Greed wins for " .. (name or "this dungeon") .. ".")
+            if Setting("openOnDungeon") and ShowBoard then ShowBoard() end
         else
             run.leftAt = nil
             showingTest = false
@@ -667,6 +669,12 @@ local function MakeTab(key, label, x, width)
 end
 MakeTab("rolls", "Rolls", 8, 60)
 MakeTab("board", "Leaderboard", 72, 90)
+
+function ShowBoard()
+    view = "board"
+    frame:Show()
+    Render()
+end
 
 local function UpdateTabs()
     for key, t in pairs(tabs) do
@@ -1439,7 +1447,7 @@ local UpdateMinimapButton -- defined in the minimap section below
 local RunTest             -- defined in the test section below
 
 local settings = CreateFrame("Frame", "DungeonWinnerSettings", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-local SETTINGS_BASE_H = 344
+local SETTINGS_BASE_H = 388
 settings:SetSize(300, SETTINGS_BASE_H)
 settings:SetPoint("CENTER", 0, 80)
 settings:SetFrameStrata("DIALOG")
@@ -1523,6 +1531,11 @@ AddCheck(-254, "Announce 67s",
     function() return Setting("announce67") end,
     function(v) DungeonWinnerDB.settings.announce67 = v end,
     "Tells your group when anyone rolls a 67")
+
+AddCheck(-298, "Open when entering a dungeon",
+    function() return Setting("openOnDungeon") end,
+    function(v) DungeonWinnerDB.settings.openOnDungeon = v end,
+    "Shows the leaderboard when a new dungeon run starts")
 
 settings:SetScript("OnShow", function()
     for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
@@ -1715,8 +1728,8 @@ themeNext:SetScript("OnClick", function() StepTheme(1) end)
 
 function PositionThemePicker()
     local p = CurrentTheme().pad
-    Anchor(themeLabel, "TOPLEFT", 16 + p, -307 - p)
-    Anchor(themeNext, "TOPRIGHT", -12 - p, -302 - p)
+    Anchor(themeLabel, "TOPLEFT", 16 + p, -351 - p)
+    Anchor(themeNext, "TOPRIGHT", -12 - p, -346 - p)
     themeBox:ClearAllPoints()
     themeBox:SetPoint("RIGHT", themeNext, "LEFT", -2, 0)
     themePrev:ClearAllPoints()
@@ -1772,6 +1785,8 @@ local function RegisterBlizzardSettings()
             function() UpdateMinimapButton() end)
         Check(st, "announce67", "Announce 67s", true,
             "When anyone in your group rolls a 67, tells your group:\n" .. ANNOUNCE_67)
+        Check(st, "openOnDungeon", "Open when entering a dungeon", true,
+            "Shows the leaderboard when you enter a dungeon and a new run starts.\nCorpse runs back into the same dungeon don't reopen it.")
 
         Header("Leaderboard")
         Check(st, "useAH", "Use auction house prices", false,
@@ -2118,6 +2133,7 @@ events:SetScript("OnEvent", function(_, event, ...)
             if st.activeEverywhere == nil then st.activeEverywhere = false end
             if st.theme == nil or not THEMES[st.theme] then st.theme = "minimal" end
             if st.announce67 == nil then st.announce67 = true end
+            if st.openOnDungeon == nil then st.openOnDungeon = true end
             st.minimap = st.minimap or { angle = 225 }
             if st.showMinimap == nil then st.showMinimap = not st.minimap.hide end
             st.minimap.hide = nil

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.8
+
+- New setting: Open when entering a dungeon (on by default). Shows the leaderboard when a new dungeon run starts.
+
 ## v0.1.7
 
 - New versions now go to CurseForge automatically when they're released on GitHub.
