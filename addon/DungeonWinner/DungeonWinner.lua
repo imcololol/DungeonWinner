@@ -1004,7 +1004,7 @@ board.sub:SetJustifyH("LEFT")
 board.sub:SetWordWrap(false)
 
 board.empty = board:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-board.empty:SetPoint("TOP", 0, -60)
+board.empty:SetPoint("TOP", 0, -72)
 
 -- Buttons at the top-right of the leaderboard: [Start run / End run] [Reset]
 local function BoardButton(width, parent)
@@ -1021,7 +1021,8 @@ local function BoardButton(width, parent)
 end
 
 board.reset = BoardButton(46)
-board.reset:SetPoint("TOPRIGHT", board, "TOPRIGHT", -2, -2)
+board.reset:SetHeight(24)
+board.reset:SetPoint("TOPRIGHT", board, "TOPRIGHT", -2, 0)
 board.reset.text:SetText("Reset")
 board.reset:SetScript("OnClick", function(self)
     -- First click asks, second click (within 3 seconds) resets
@@ -1051,6 +1052,7 @@ board.reset:SetScript("OnClick", function(self)
 end)
 
 board.toggle = BoardButton(66)
+board.toggle:SetHeight(24)
 board.toggle:SetPoint("RIGHT", board.reset, "LEFT", -4, 0)
 board.toggle:SetScript("OnClick", function()
     if ManualActive() then EndManualRun() else StartManualRun() end
@@ -1061,8 +1063,8 @@ board.title:SetPoint("RIGHT", board.toggle, "LEFT", -6, 0)
 
 -- Run picker: click the run name to choose any run from this session
 board.pick = CreateFrame("Button", nil, board, BackdropTemplateMixin and "BackdropTemplate" or nil)
-board.pick:SetPoint("TOPLEFT", board, "TOPLEFT", 0, 1)
-board.pick:SetPoint("RIGHT", board.toggle, "LEFT", -6, 0)
+board.pick:SetPoint("TOPLEFT", board, "TOPLEFT", 2, 0)
+board.pick:SetPoint("RIGHT", board.toggle, "LEFT", -8, 0)
 board.pick:SetHeight(24)
 -- looks like a drop-down box: faint fill + border, brighter on hover
 board.pick:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
@@ -1081,9 +1083,19 @@ board.pick:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 board.arrow = board.pick:CreateTexture(nil, "ARTWORK")
-board.arrow:SetSize(26, 26)
-board.arrow:SetPoint("LEFT", 2, 0)
-board.arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+board.arrow:SetSize(14, 14)
+board.arrow:SetPoint("RIGHT", -6, 0)
+board.arrow:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+if board.arrow.SetRotation then board.arrow:SetRotation(-math.pi / 2) end -- point it down
+board.arrow:SetVertexColor(1, 0.82, 0)
+
+-- run name sits inside the box, vertically centred; subtitle goes below the box
+board.title:ClearAllPoints()
+board.title:SetPoint("LEFT", board.pick, "LEFT", 8, 0)
+board.title:SetPoint("RIGHT", board.arrow, "LEFT", -6, 0)
+board.sub:ClearAllPoints()
+board.sub:SetPoint("TOPLEFT", board.pick, "BOTTOMLEFT", 2, -6)
+board.sub:SetPoint("RIGHT", board, "RIGHT", -4, 0)
 
 board.menu = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
 board.menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
@@ -1324,7 +1336,7 @@ local function RenderBoard()
     board.empty:SetShown(#list == 0)
     board.empty:SetText("No Greed wins yet.")
 
-    local y = 38
+    local y = 50
     for i, s in ipairs(list) do
         local r = GetBoardRow(i)
         r:ClearAllPoints()
