@@ -715,6 +715,7 @@ local frame = CreateFrame("Frame", "DungeonWinnerFrame", UIParent, BackdropTempl
 frame:SetSize(280, 420)
 frame:SetPoint("CENTER")
 frame:SetFrameStrata("MEDIUM")
+frame:SetToplevel(true) -- clicking it brings it in front of other windows, like Blizzard's
 frame:SetMovable(true)
 frame:SetResizable(true)
 if frame.SetResizeBounds then frame:SetResizeBounds(240, 160, 520, 900) end
@@ -1254,9 +1255,19 @@ board.menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "In
 board.menu:SetBackdropColor(0.06, 0.06, 0.08, 0.98)
 board.menu:SetBackdropBorderColor(0.35, 0.35, 0.4, 1)
 board.menu:SetPoint("TOPLEFT", board.pick, "BOTTOMLEFT", 0, -2)
-board.menu:SetFrameStrata("DIALOG")
+-- Same layer as the DungeonWinner window (not above everything), so quest
+-- dialogs and other windows can cover it
+board.menu:SetFrameStrata(frame:GetFrameStrata())
 board.menu:Hide()
 board:HookScript("OnHide", function() board.menu:Hide() end)
+
+-- Close the list when you click anywhere outside it
+board.menu:SetScript("OnUpdate", function(self)
+    if (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton"))
+        and not self:IsMouseOver() and not board.pick:IsMouseOver() then
+        self:Hide()
+    end
+end)
 
 local menuItems = {}
 
@@ -1307,6 +1318,8 @@ local function OpenRunMenu()
     end
     if #runs == 0 then return end
     board.menu:SetSize(width, #runs * 20 + 8)
+    board.menu:SetFrameStrata(frame:GetFrameStrata())
+    board.menu:SetFrameLevel(frame:GetFrameLevel() + 30)
     board.menu:Show()
 end
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.13.0
+
+- Fix: the run list on the Leaderboard tab showed on top of other windows (like quest dialogs). It now sits with the DungeonWinner window and closes when you click elsewhere.
+- Clicking the DungeonWinner window brings it in front of other windows.
+
 ## v0.12.0
 
 - Fix: after logging back in, players from earlier runs could show twice on the leaderboard ("Meddle" and "Meddle Floyd"). DungeonWinner now remembers full names and merges them, even when you're solo.
