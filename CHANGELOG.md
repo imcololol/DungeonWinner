@@ -2,6 +2,8 @@
 
 ## v0.13.0
 
+- Blackrock Spire: UBRS (a 10-player instance) and LBRS now start a dungeon run like any other dungeon. Only 20/40-player raids are treated as raids.
+- Smoother with lots of loot: the window redraws at most ~10 times a second, and the Rolls tab shows the newest 60 items.
 - Fix: the run list on the Leaderboard tab showed on top of other windows (like quest dialogs). It now sits with the DungeonWinner window and closes when you click elsewhere.
 - Clicking the DungeonWinner window brings it in front of other windows.
 

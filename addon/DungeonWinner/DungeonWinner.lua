@@ -300,6 +300,18 @@ end
 
 local Render    -- defined in the UI section
 local NormalizeSavedNames -- defined in the data section
+
+-- Busy loot (Blackrock Spire!) sends lots of chat lines in a burst. Redraw at
+-- most ~10 times a second instead of once per line.
+local renderQueued = false
+local function RequestRender()
+    if renderQueued then return end
+    renderQueued = true
+    C_Timer.After(0.1, function()
+        renderQueued = false
+        Render()
+    end)
+end
 local ShowBoard -- defined in the UI section: opens the window on the Leaderboard tab
 
 ---------------------------------------------------------------------------
@@ -323,8 +335,11 @@ local function InstanceKind()
     if kind == nil or kind == "none" then kind = infoType end
     if not inInstance and (kind == nil or kind == "none") then return nil end
     if kind == "pvp" or kind == "arena" then return nil end
-    if kind == "raid" or (maxPlayers and maxPlayers > 5) then return "raid" end
-    return "dungeon" -- "party", "scenario", or whatever Forever calls its 5-player dungeons
+    -- Up to 10 players counts as a dungeon: UBRS is a 10-player "raid", and
+    -- LBRS shares its instance. Only bigger raids (20/40) count as raids.
+    if maxPlayers and maxPlayers > 10 then return "raid" end
+    if kind == "raid" and not (maxPlayers and maxPlayers > 0) then return "raid" end
+    return "dungeon" -- "party", "scenario", 10-player BRS, or whatever Forever calls its dungeons
 end
 
 local function InDungeon()
@@ -651,7 +666,7 @@ local function OnLootMessage(msg, force)
         if f then
             if debugMode then Print("matched", def.key) end
             HandleMessage(def, f, force) -- force = test roll, never announced
-            Render()
+            RequestRender()
             return
         end
     end
@@ -1543,9 +1558,10 @@ function Render()
     for _, c in ipairs(cardPool) do c:Hide() end
     for _, r in ipairs(rowPool) do r:Hide() end
 
+    local MAX_SHOWN = 60 -- only draw the newest items; older ones are still saved
     local y, ci, ri = 0, 0, 0
     for _, item in ipairs(DungeonWinnerDB.history) do
-        if not item.hidden then
+        if not item.hidden and ci < MAX_SHOWN then
             ci = ci + 1
             local c = GetCard(ci)
             FillCard(c, item)
