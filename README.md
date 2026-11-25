@@ -32,7 +32,7 @@ You should end up with `AddOns\DungeonWinner\DungeonWinner.toc`. Keep the folder
 
 - Tracking starts when you enter a dungeon, and the leaderboard opens (you can turn that off in settings). Each dungeon run gets its own leaderboard.
 - Only items won with a **Greed** roll count. Need wins, raids and loot outside dungeons don't.
-- Leaving and coming back to the same dungeon within 15 minutes continues the same run. A different dungeon, or a longer break, starts a new one.
+- Leaving and coming back to the same dungeon within 15 minutes continues the same run. After 15 minutes away the run ends; a different dungeon also starts a new one.
 - Want to track somewhere else (open-world farming, a raid)? Click **Start run** at the top of the leaderboard, or type `/dw start` (optionally with a name, like `/dw start ZG farm`). It tracks Greed wins anywhere until you click **End run** or type `/dw stop`.
 - Click the run name at the top of the leaderboard to look back at any run from this play session.
 - Click **Share** at the bottom of the leaderboard to post the top 5 to group chat.

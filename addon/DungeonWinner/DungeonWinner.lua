@@ -376,6 +376,9 @@ local function StartRun(name, instanceID, isTest, manual)
         DungeonWinnerDB.testRun = run
         showingTest = true
     else
+        local prev = DungeonWinnerDB.run
+        if prev and not prev.ended then prev.ended = prev.leftAt or now end -- a new run closes the old one
+        run.lastSeen = now
         DungeonWinnerDB.run = run
         RememberRun(run)
         showingTest = false
@@ -413,6 +416,20 @@ local function EndManualRun()
     if Render then Render() end
 end
 
+-- A dungeon run ends once you've been out of the dungeon for 15 minutes.
+-- "Out" is counted from when you left, or, if you logged out inside, from the
+-- last time you were seen in there (lastSeen is refreshed every minute).
+local function EndStaleRun()
+    local run = DungeonWinnerDB and DungeonWinnerDB.run
+    if not run or run.ended or run.manual or run.test or inDungeon then return end
+    local away = run.leftAt or run.lastSeen or run.started -- runs saved by older versions only have "started"
+    if away and time() - away >= RUN_RESUME_SECONDS then
+        run.ended = away
+        Print("Dungeon run ended: " .. (run.name or "dungeon") .. ".")
+        if Render then Render() end
+    end
+end
+
 local function CheckInstance()
     local run = DungeonWinnerDB.run
     if ManualActive() then
@@ -420,25 +437,36 @@ local function CheckInstance()
         if Render then Render() end
         return
     end
+    local now = time()
     if InDungeon() then
         local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
-        local now = time()
-        local stale = run and run.leftAt and (now - run.leftAt > RUN_RESUME_SECONDS)
-        if not run or run.instanceID ~= instanceID or stale then
+        local away = run and (run.leftAt or run.lastSeen)
+        local stale = away and (now - away > RUN_RESUME_SECONDS)
+        if not run or run.ended or run.manual or run.instanceID ~= instanceID or stale then
             StartRun(name, instanceID)
             Print("Tracking Greed wins for " .. (name or "this dungeon") .. ".")
             if Setting("openOnDungeon") and ShowBoard then ShowBoard() end
         else
+            -- back within 15 minutes (corpse run, hearth out and back): same run
             run.leftAt = nil
+            run.lastSeen = now
             showingTest = false
         end
         inDungeon = true
     else
-        if inDungeon and run then run.leftAt = time() end
+        if inDungeon and run and not run.ended then run.leftAt = now end
         inDungeon = false
+        EndStaleRun()
     end
     if Render then Render() end
 end
+
+-- Every minute: note that we're still inside, and end runs we've been away from
+C_Timer.NewTicker(60, function()
+    local run = DungeonWinnerDB and DungeonWinnerDB.run
+    if inDungeon and run and not run.ended then run.lastSeen = time() end
+    EndStaleRun()
+end)
 
 local function NewItem(link, name, icon)
     local id = ItemID(link)
@@ -1506,7 +1534,17 @@ local function RenderBoard()
     local minutes = math.floor(((run.ended or run.leftAt or time()) - run.started) / 60)
     local prices = (Setting("useAH") and AuctionatorReady()) and "Auctionator prices" or "vendor prices"
     local kind = run.manual and "manual, " or ""
-    local status = run.test and "test data" or (kind .. minutes .. "m, " .. (live and "in progress" or "finished"))
+    local status
+    if run.test then
+        status = "test data"
+    elseif live then
+        status = kind .. minutes .. "m, in progress"
+    elseif isCurrent and not run.ended and not run.manual and run.leftAt then
+        local left = math.max(1, math.ceil((RUN_RESUME_SECONDS - (time() - run.leftAt)) / 60))
+        status = minutes .. "m, left the dungeon (ends in " .. left .. "m)"
+    else
+        status = kind .. minutes .. "m, finished"
+    end
     board.title:SetText((run.name or "Dungeon") .. (isCurrent and "" or " |cff888888(past run)|r"))
     board.sub:SetText("Greed wins only - " .. prices .. " - " .. status)
 
