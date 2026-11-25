@@ -475,6 +475,10 @@ end
 local function CheckGroupChange()
     local run = DungeonWinnerDB and DungeonWinnerDB.run
     if not run or run.ended or run.test then return end
+    -- Battlegrounds and arenas put you in a temporary PvP group; that isn't
+    -- your dungeon group changing, so ignore it
+    local _, instanceType = IsInInstance()
+    if instanceType == "pvp" or instanceType == "arena" then return end
     run.members = run.members or {}
 
     local current, total, overlap = {}, 0, 0
