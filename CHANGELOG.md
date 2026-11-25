@@ -2,6 +2,7 @@
 
 ## v0.14.0
 
+- Runs follow your group: if you join a mostly different group, the old run ends (and a new one starts if you're in a dungeon) instead of adding the new players to it. A replacement joining keeps the same run.
 - Dungeon runs now end 15 minutes after you leave the dungeon (the leaderboard shows "left the dungeon, ends in Xm" until then). Coming back sooner continues the same run.
 - Logging out inside a dungeon and coming back later ends that run instead of leaving it open.
 - Starting a new run always closes the previous one.

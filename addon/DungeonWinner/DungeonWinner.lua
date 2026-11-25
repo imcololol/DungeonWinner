@@ -379,6 +379,13 @@ local function StartRun(name, instanceID, isTest, manual)
         local prev = DungeonWinnerDB.run
         if prev and not prev.ended then prev.ended = prev.leftAt or now end -- a new run closes the old one
         run.lastSeen = now
+        run.members = {}
+        if IsInGroup() then
+            ForEachGroupMember(function(unit)
+                local n = UnitDisplayName(unit)
+                if n and not NamesMatch(n, playerName) then run.members[n] = true end
+            end)
+        end
         DungeonWinnerDB.run = run
         RememberRun(run)
         showingTest = false
@@ -459,6 +466,45 @@ local function CheckInstance()
         EndStaleRun()
     end
     if Render then Render() end
+end
+
+-- Group changes: a run belongs to the group that played it. If you end up in a
+-- mostly different group (fewer than half of the players were in this run),
+-- the old run ends and, inside a dungeon, a new one starts for the new group.
+-- A replacement joining (one in, one out) keeps the same run.
+local function CheckGroupChange()
+    local run = DungeonWinnerDB and DungeonWinnerDB.run
+    if not run or run.ended or run.test then return end
+    run.members = run.members or {}
+
+    local current, total, overlap = {}, 0, 0
+    if IsInGroup() then
+        ForEachGroupMember(function(unit)
+            local n = UnitDisplayName(unit)
+            if n and not NamesMatch(n, playerName) then
+                current[#current + 1] = n
+                total = total + 1
+                for known in pairs(run.members) do
+                    if NamesMatch(known, n) then overlap = overlap + 1; break end
+                end
+            end
+        end)
+    end
+    if total == 0 then return end -- solo for now: wait and see who you group with next
+
+    local hadGroup = next(run.members) ~= nil
+    if hadGroup and overlap < total / 2 then
+        run.ended = time()
+        Print("New group, so the previous run ended: " .. (run.name or "run") .. ".")
+        if InDungeon() then
+            local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
+            StartRun(name, instanceID)
+            Print("Tracking Greed wins for " .. (name or "this dungeon") .. ".")
+        end
+        if Render then Render() end
+        return
+    end
+    for _, n in ipairs(current) do run.members[n] = true end -- newcomers join this run
 end
 
 -- Every minute: note that we're still inside, and end runs we've been away from
@@ -2306,6 +2352,7 @@ events:RegisterEvent("CHAT_MSG_LOOT")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 events:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+events:RegisterEvent("GROUP_ROSTER_UPDATE")
 
 local refreshQueued = false
 
@@ -2377,6 +2424,8 @@ events:SetScript("OnEvent", function(_, event, ...)
         CheckInstance()
         -- Instance info isn't always ready the moment you zone in; check again shortly after
         C_Timer.After(3, CheckInstance)
+    elseif event == "GROUP_ROSTER_UPDATE" then
+        CheckGroupChange()
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         -- item prices arrived; refresh once shortly after (this event fires a lot)
         if frame:IsShown() and not refreshQueued then
