@@ -1388,7 +1388,7 @@ board.pick:SetScript("OnEnter", function(self)
     self:SetBackdropColor(1, 1, 1, 0.12)
     self:SetBackdropBorderColor(1, 0.82, 0, 0.9)
     GameTooltip:SetOwner(self, "ANCHOR_TOP") -- above, so it never covers the run list below
-    GameTooltip:AddLine("Click to view another run from this session", 1, 1, 1)
+    GameTooltip:AddLine("Click to view another saved run", 1, 1, 1)
     GameTooltip:Show()
 end)
 board.pick:SetScript("OnLeave", function(self)
@@ -1432,18 +1432,22 @@ end)
 
 local menuItems = {}
 
+-- Every saved run, newest first (the 15 newest fit in the list)
+local MAX_LISTED_RUNS = 15
 local function SessionRuns()
     local list = {}
     for _, run in ipairs(DungeonWinnerDB.runs or {}) do
-        if run == DungeonWinnerDB.run or (run.started or 0) >= SessionStart() then
-            list[#list + 1] = run
-        end
+        if #list >= MAX_LISTED_RUNS then break end
+        list[#list + 1] = run
     end
     return list
 end
 
 local function RunLabel(run)
-    local label = (run.name or "Run") .. " |cff888888" .. date("%H:%M", run.started or time()) .. "|r"
+    -- show the time for today's runs, and the date for older ones
+    local when = date("%x", run.started or 0) == date("%x") and date("%H:%M", run.started or time())
+        or date("%b %d, %H:%M", run.started or time())
+    local label = (run.name or "Run") .. " |cff888888" .. when .. "|r"
     if run == DungeonWinnerDB.run then label = label .. " |cff33ff99(current)|r" end
     return label
 end
@@ -1451,7 +1455,7 @@ end
 local function OpenRunMenu()
     local runs = SessionRuns()
     for _, b in ipairs(menuItems) do b:Hide() end
-    local width = 200
+    local width = 230
     for i, run in ipairs(runs) do
         local b = menuItems[i]
         if not b then
