@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.0
+
+- Killing a dungeon's final boss ends the run, a few minutes later once the loot has been rolled, so the boss's loot still counts.
+- Walking into a dungeon ends a manual run and starts a dungeon run.
+- `/dw where` also shows the instance's final boss.
+- The "Click to view another run" hint now disappears when you click.
+
 ## v0.14.0
 
 - Runs follow your group: if you join a mostly different group, the old run ends (and a new one starts if you're in a dungeon) instead of adding the new players to it. A replacement joining keeps the same run. Battleground and arena groups don't count as a group change.

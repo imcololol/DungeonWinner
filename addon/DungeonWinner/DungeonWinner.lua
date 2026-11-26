@@ -440,13 +440,25 @@ end
 local function CheckInstance()
     local run = DungeonWinnerDB.run
     if ManualActive() then
-        inDungeon = InDungeon() -- manual runs aren't replaced by dungeons
-        if Render then Render() end
-        return
+        if not InDungeon() then
+            inDungeon = false
+            if Render then Render() end
+            return
+        end
+        -- Walking into a dungeon ends a manual run; the dungeon gets its own run
+        run.ended = time()
+        Print("Entered a dungeon, so the manual run ended: " .. (run.name or "run") .. ".")
     end
     local now = time()
     if InDungeon() then
         local name, _, _, _, _, _, _, instanceID = GetInstanceInfo()
+        -- Final boss already killed and we haven't left yet (e.g. a /reload):
+        -- stay finished instead of starting a second run of the same dungeon
+        if run and run.ended and run.endReason == "boss" and run.instanceID == instanceID and not run.leftAfterEnd then
+            inDungeon = true
+            if Render then Render() end
+            return
+        end
         local away = run and (run.leftAt or run.lastSeen)
         local stale = away and (now - away > RUN_RESUME_SECONDS)
         if not run or run.ended or run.manual or run.instanceID ~= instanceID or stale then
@@ -462,6 +474,7 @@ local function CheckInstance()
         inDungeon = true
     else
         if inDungeon and run and not run.ended then run.leftAt = now end
+        if run and run.ended then run.leftAfterEnd = true end
         inDungeon = false
         EndStaleRun()
     end
@@ -511,10 +524,64 @@ local function CheckGroupChange()
     for _, n in ipairs(current) do run.members[n] = true end -- newcomers join this run
 end
 
--- Every minute: note that we're still inside, and end runs we've been away from
-C_Timer.NewTicker(60, function()
+-- Final boss: look up the last boss of this instance in the Dungeon Journal.
+-- Returns its encounter ID (the one ENCOUNTER_END reports) and name, or nil
+-- if the journal doesn't know this place.
+local function FinalEncounter()
+    if not (EJ_GetInstanceForMap and EJ_GetEncounterInfoByIndex and C_Map and C_Map.GetBestMapForUnit) then
+        return nil
+    end
+    local ok, lastID, lastName = pcall(function()
+        local mapID = C_Map.GetBestMapForUnit("player")
+        local journalID = mapID and EJ_GetInstanceForMap(mapID)
+        if not journalID or journalID == 0 then return nil end
+        local id, nm
+        for i = 1, 50 do
+            local name, _, _, _, _, _, dungeonEncounterID = EJ_GetEncounterInfoByIndex(i, journalID)
+            if not name then break end
+            id, nm = dungeonEncounterID, name
+        end
+        return id, nm
+    end)
+    if ok then return lastID, lastName end
+    return nil
+end
+
+local function OnEncounterEnd(encounterID, encounterName, _, _, success)
+    local run = DungeonWinnerDB.run
+    if debugMode then Print("ENCOUNTER_END", encounterID, encounterName, "success:", success) end
+    if success ~= 1 or not inDungeon or not run or run.ended or run.manual or run.test then return end
+    local finalID, finalName = FinalEncounter()
+    if debugMode then Print("  final boss here:", tostring(finalName), tostring(finalID)) end
+    if finalID and finalID == encounterID then
+        run.bossKilledAt = time()
+        Print((encounterName or "Final boss") .. " is down. This run ends once the loot has been rolled.")
+        if Render then Render() end
+    end
+end
+
+-- After the final boss: end the run 3 minutes after the kill, but wait while
+-- loot is still being rolled (any open roll, or a roll started in the last minute)
+local function EndAfterBoss()
+    local run = DungeonWinnerDB and DungeonWinnerDB.run
+    if not run or run.ended or not run.bossKilledAt then return end
+    local now = time()
+    if now - run.bossKilledAt < 180 or now - (run.lastRollAt or 0) < 60 then return end
+    for _, item in ipairs(DungeonWinnerDB.history) do
+        if item.runId == run.id and not item.done then return end
+    end
+    run.ended = now
+    run.endReason = "boss"
+    Print("Run finished: " .. (run.name or "dungeon") .. ".")
+    if Render then Render() end
+end
+
+-- Every 15 seconds: note that we're still inside, end runs after the final
+-- boss, and end runs we've been away from for 15 minutes
+C_Timer.NewTicker(15, function()
     local run = DungeonWinnerDB and DungeonWinnerDB.run
     if inDungeon and run and not run.ended then run.lastSeen = time() end
+    EndAfterBoss()
     EndStaleRun()
 end)
 
@@ -533,6 +600,7 @@ local function NewItem(link, name, icon)
     local run = DungeonWinnerDB.run
     if run and not run.ended and (ManualActive() or (inDungeon and not run.manual)) then
         item.runId = DungeonWinnerDB.run.id
+        run.lastRollAt = time()
         showingTest = false
     end
     local hist = DungeonWinnerDB.history
@@ -1417,6 +1485,7 @@ local function OpenRunMenu()
 end
 
 board.pick:SetScript("OnClick", function()
+    GameTooltip:Hide() -- the "click to view" hint goes away once you click
     if board.menu:IsShown() then board.menu:Hide() else OpenRunMenu() end
 end)
 
@@ -1587,6 +1656,8 @@ local function RenderBoard()
     local status
     if run.test then
         status = "test data"
+    elseif live and run.bossKilledAt then
+        status = minutes .. "m, final boss down (ending soon)"
     elseif live then
         status = kind .. minutes .. "m, in progress"
     elseif isCurrent and not run.ended and not run.manual and run.leftAt then
@@ -2357,6 +2428,7 @@ events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 events:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 events:RegisterEvent("GROUP_ROSTER_UPDATE")
+pcall(events.RegisterEvent, events, "ENCOUNTER_END")
 
 local refreshQueued = false
 
@@ -2428,6 +2500,8 @@ events:SetScript("OnEvent", function(_, event, ...)
         CheckInstance()
         -- Instance info isn't always ready the moment you zone in; check again shortly after
         C_Timer.After(3, CheckInstance)
+    elseif event == "ENCOUNTER_END" then
+        OnEncounterEnd(...)
     elseif event == "GROUP_ROSTER_UPDATE" then
         CheckGroupChange()
     elseif event == "GET_ITEM_INFO_RECEIVED" then
@@ -2533,6 +2607,8 @@ SlashCmdList.DUNGEONWINNER = function(msg)
             :format(tostring(name), tostring(inInstance), tostring(instanceType), tostring(infoType),
                 tostring(maxPlayers), tostring(difficultyName), tostring(difficultyID), tostring(instanceID)))
         Print("DungeonWinner sees this as: " .. (InstanceKind() or "not an instance"))
+        local finalID, finalName = FinalEncounter()
+        Print("Final boss (from the Dungeon Journal): " .. (finalName and (finalName .. " [" .. tostring(finalID) .. "]") or "unknown"))
     elseif msg == "debug" then
         if not IsDeveloper() then
             Print("That command is for the addon developer only.")

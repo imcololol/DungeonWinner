@@ -30,6 +30,7 @@ You should end up with `AddOns\DungeonWinner\DungeonWinner.toc`. Keep the folder
 
 ## How the leaderboard works
 
+- A run ends when the final boss dies (once its loot is rolled), or 15 minutes after you leave the dungeon.
 - Tracking starts when you enter a dungeon, and the leaderboard opens (you can turn that off in settings). Each dungeon run gets its own leaderboard.
 - Only items won with a **Greed** roll count. Need wins, raids and loot outside dungeons don't.
 - Leaving and coming back to the same dungeon within 15 minutes continues the same run. After 15 minutes away the run ends; a different dungeon, or joining a mostly different group, also starts a new one.
