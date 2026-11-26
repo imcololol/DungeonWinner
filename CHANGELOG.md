@@ -5,7 +5,7 @@
 - Killing a dungeon's final boss ends the run, a few minutes later once the loot has been rolled, so the boss's loot still counts.
 - Walking into a dungeon ends a manual run and starts a dungeon run.
 - `/dw where` also shows the instance's final boss.
-- The "Click to view another run" hint now disappears when you click.
+- The "Click to view another run" hint now shows above the box and disappears when you click.
 
 ## v0.14.0
 

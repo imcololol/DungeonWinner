@@ -1387,7 +1387,7 @@ board.pick:SetBackdropBorderColor(1, 0.82, 0, 0.35)
 board.pick:SetScript("OnEnter", function(self)
     self:SetBackdropColor(1, 1, 1, 0.12)
     self:SetBackdropBorderColor(1, 0.82, 0, 0.9)
-    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:SetOwner(self, "ANCHOR_TOP") -- above, so it never covers the run list below
     GameTooltip:AddLine("Click to view another run from this session", 1, 1, 1)
     GameTooltip:Show()
 end)
