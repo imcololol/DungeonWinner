@@ -2604,6 +2604,20 @@ SlashCmdList.DUNGEONWINNER = function(msg)
             ForEachGroupMember(Show)
             if not IsInGroup() then Show("player") end
         end
+    elseif msg == "runs" then
+        -- What's saved, for bug reports
+        local cur = DungeonWinnerDB.run
+        Print("Current run: " .. (cur and ((cur.name or "?") .. (cur.manual and " (manual)" or "") ..
+            (cur.ended and " (ended)" or " (open)")) or "none"))
+        local runs = DungeonWinnerDB.runs or {}
+        Print(#runs .. " saved run(s):")
+        for i, r in ipairs(runs) do
+            if i > 15 then break end
+            local count = 0
+            for _, item in ipairs(DungeonWinnerDB.history) do if item.runId == r.id then count = count + 1 end end
+            Print(("  %d. %s - %s%s%s, %d roll(s)"):format(i, r.name or "?", date("%b %d %H:%M", r.started or 0),
+                r.manual and ", manual" or "", r.ended and ", ended" or ", open", count))
+        end
     elseif msg == "where" then
         local inInstance, instanceType = IsInInstance()
         local name, infoType, difficultyID, difficultyName, maxPlayers, _, _, instanceID = GetInstanceInfo()

@@ -48,6 +48,7 @@ You should end up with `AddOns\DungeonWinner\DungeonWinner.toc`. Keep the folder
 | `/dw start [name]` | Start a leaderboard run manually |
 | `/dw stop` | End a manual run |
 | `/dw settings` | Open the settings (also in Esc > Options > AddOns > DungeonWinner) |
+| `/dw runs` | List your saved runs (for bug reports) |
 | `/dw where` | Show what the game reports about your current zone (for bug reports) |
 | `/dw minimap` | Show or hide the minimap button |
 | `/dw test` | Show sample rolls, handy for sizing and placing the window |
