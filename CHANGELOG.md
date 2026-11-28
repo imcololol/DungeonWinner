@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.16.0
+
+- Vendor / AH prices are now a sliding switch at the top of the Leaderboard tab, instead of a setting.
+
 ## v0.15.0
 
 - Killing a dungeon's final boss ends the run, a few minutes later once the loot has been rolled, so the boss's loot still counts.

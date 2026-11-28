@@ -879,7 +879,7 @@ frame:SetFrameStrata("MEDIUM")
 frame:SetToplevel(true) -- clicking it brings it in front of other windows, like Blizzard's
 frame:SetMovable(true)
 frame:SetResizable(true)
-if frame.SetResizeBounds then frame:SetResizeBounds(240, 160, 520, 900) end
+if frame.SetResizeBounds then frame:SetResizeBounds(270, 160, 520, 900) end
 frame:SetClampedToScreen(true)
 frame:EnableMouse(true)
 frame:RegisterForDrag("LeftButton")
@@ -898,7 +898,7 @@ local function RestoreLayout()
     if not l then return end
     frame:ClearAllPoints()
     frame:SetPoint(l[1], UIParent, l[2], l[3], l[4])
-    frame:SetSize(l[5], l[6])
+    frame:SetSize(math.max(270, l[5]), l[6])
 end
 
 frame:SetScript("OnDragStart", frame.StartMoving)
@@ -1013,7 +1013,7 @@ grip:SetPoint("BOTTOMRIGHT", -2, 2)
 grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
 grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
 grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-local MIN_W, MAX_W, MIN_H, MAX_H = 240, 520, 160, 900
+local MIN_W, MAX_W, MIN_H, MAX_H = 270, 520, 160, 900 -- 270 wide keeps the tabs and price switch apart
 
 grip:SetScript("OnMouseDown", function(self)
     -- Pin the top-left corner, then size the window to follow the cursor.
@@ -1510,6 +1510,94 @@ local function ClearRolls()
     Render()
 end
 
+
+-- Vendor / AH price switch, top-right of the Leaderboard tab. Slides the knob
+-- across; AH needs Auctionator (items it has no price for use vendor prices).
+local priceToggle = CreateFrame("Button", nil, frame)
+priceToggle:SetSize(92, 18)
+priceToggle.vendor = priceToggle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+priceToggle.vendor:SetPoint("LEFT", 0, 0)
+priceToggle.vendor:SetText("Vendor")
+priceToggle.track = CreateFrame("Frame", nil, priceToggle, BackdropTemplateMixin and "BackdropTemplate" or nil)
+priceToggle.track:SetSize(30, 14)
+priceToggle.track:SetPoint("LEFT", priceToggle.vendor, "RIGHT", 5, 0)
+priceToggle.track:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+priceToggle.track:EnableMouse(false)
+priceToggle.knob = priceToggle.track:CreateTexture(nil, "OVERLAY")
+priceToggle.knob:SetSize(12, 10)
+priceToggle.knob:SetColorTexture(1, 1, 1, 0.95)
+priceToggle.ah = priceToggle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+priceToggle.ah:SetPoint("LEFT", priceToggle.track, "RIGHT", 5, 0)
+priceToggle.ah:SetText("AH")
+priceToggle.knobX = 2
+
+local KNOB_OFF, KNOB_ON = 2, 16
+
+local function StylePriceToggle()
+    local on = Setting("useAH") == true and AuctionatorReady()
+    local gold, grey = { 1, 0.82, 0 }, { 0.5, 0.5, 0.5 }
+    local v, a = on and grey or gold, on and gold or grey
+    priceToggle.vendor:SetTextColor(v[1], v[2], v[3])
+    priceToggle.ah:SetTextColor(a[1], a[2], a[3])
+    if not AuctionatorReady() then priceToggle.ah:SetTextColor(0.35, 0.35, 0.35) end
+    if on then
+        priceToggle.track:SetBackdropColor(1, 0.82, 0, 0.55)
+        priceToggle.track:SetBackdropBorderColor(1, 0.82, 0, 0.9)
+    else
+        priceToggle.track:SetBackdropColor(0.2, 0.2, 0.24, 1)
+        priceToggle.track:SetBackdropBorderColor(1, 1, 1, 0.25)
+    end
+    return on
+end
+
+local function PlaceKnob(x)
+    priceToggle.knobX = x
+    priceToggle.knob:ClearAllPoints()
+    priceToggle.knob:SetPoint("LEFT", priceToggle.track, "LEFT", x, 0)
+end
+
+local function UpdatePriceToggle(animate)
+    local target = StylePriceToggle() and KNOB_ON or KNOB_OFF
+    if not animate then
+        priceToggle:SetScript("OnUpdate", nil)
+        PlaceKnob(target)
+        return
+    end
+    priceToggle:SetScript("OnUpdate", function(self, elapsed)
+        local x = self.knobX
+        local step = elapsed * 120
+        if math.abs(target - x) <= step then
+            PlaceKnob(target)
+            self:SetScript("OnUpdate", nil)
+        else
+            PlaceKnob(x + (target > x and step or -step))
+        end
+    end)
+end
+
+priceToggle:SetScript("OnClick", function()
+    if not AuctionatorReady() then
+        Print("AH prices need the Auctionator addon. Using vendor prices.")
+        return
+    end
+    DungeonWinnerDB.settings.useAH = not (Setting("useAH") == true)
+    UpdatePriceToggle(true)
+    Render()
+end)
+priceToggle:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine("Leaderboard prices", 1, 1, 1)
+    if AuctionatorReady() then
+        GameTooltip:AddLine("Click to switch between vendor and auction house (Auctionator) prices.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Items with no AH price use their vendor price.", 0.6, 0.6, 0.6, true)
+    else
+        GameTooltip:AddLine("Install Auctionator to use auction house prices.", 0.8, 0.8, 0.8, true)
+    end
+    GameTooltip:Show()
+end)
+priceToggle:SetScript("OnLeave", function() GameTooltip:Hide() end)
+PlaceKnob(KNOB_OFF)
+
 local clearBtn = BoardButton(46, frame)
 clearBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -29)
 clearBtn.text:SetText("Clear")
@@ -1709,6 +1797,8 @@ function Render()
     if not frame:IsShown() then return end
     UpdateTabs()
     clearBtn:SetShown(view == "rolls")
+    priceToggle:SetShown(view == "board")
+    if view == "board" and not priceToggle:GetScript("OnUpdate") then UpdatePriceToggle(false) end
     if view == "board" then
         scroll:Hide()
         bar:Hide()
@@ -1760,7 +1850,7 @@ local UpdateMinimapButton -- defined in the minimap section below
 local RunTest             -- defined in the test section below
 
 local settings = CreateFrame("Frame", "DungeonWinnerSettings", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-local SETTINGS_BASE_H = 432
+local SETTINGS_BASE_H = 388
 settings:SetSize(300, SETTINGS_BASE_H)
 settings:SetPoint("CENTER", 0, 80)
 settings:SetFrameStrata("DIALOG")
@@ -1826,46 +1916,33 @@ AddCheck(-78, "Only show first names",
     function(v) DungeonWinnerDB.settings.firstNameOnly = v; Render() end,
     "Hides last names in the roll list")
 
-local ahCheck = AddCheck(-122, "Use auction house prices",
-    function() return Setting("useAH") end,
-    function(v) DungeonWinnerDB.settings.useAH = v; Render() end)
-
-AddCheck(-166, "Open when a roll starts",
+AddCheck(-122, "Open when a roll starts",
     function() return DungeonWinnerDB.autoShow end,
     function(v) DungeonWinnerDB.autoShow = v end,
     "Pops the roll window up automatically")
 
-AddCheck(-210, "Show minimap button",
+AddCheck(-166, "Show minimap button",
     function() return DungeonWinnerDB.settings.showMinimap end,
     function(v) DungeonWinnerDB.settings.showMinimap = v; UpdateMinimapButton() end,
     "If hidden, bring it back with /dw minimap")
 
-AddCheck(-254, "Announce 67s",
+AddCheck(-210, "Announce 67s",
     function() return Setting("announce67") end,
     function(v) DungeonWinnerDB.settings.announce67 = v end,
     "Tells your group when anyone rolls a 67")
 
-AddCheck(-298, "Open when entering a dungeon",
+AddCheck(-254, "Open when entering a dungeon",
     function() return Setting("openOnDungeon") end,
     function(v) DungeonWinnerDB.settings.openOnDungeon = v end,
     "Shows the leaderboard when a new dungeon run starts")
 
-AddCheck(-342, "Collapse rolls when finished",
+AddCheck(-298, "Collapse rolls when finished",
     function() return Setting("collapseWon") end,
     function(v) DungeonWinnerDB.settings.collapseWon = v end,
     "Folds an item's roll list once someone wins it")
 
 settings:SetScript("OnShow", function()
     for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
-    if AuctionatorReady() then
-        ahCheck:Enable()
-        ahCheck.label:SetTextColor(1, 1, 1)
-        ahCheck.note:SetText("Leaderboard uses Auctionator prices (vendor price if none)")
-    else
-        ahCheck:Disable()
-        ahCheck.label:SetTextColor(0.5, 0.5, 0.5)
-        ahCheck.note:SetText("Needs the Auctionator addon. Using vendor prices.")
-    end
 end)
 
 ---------------------------------------------------------------------------
@@ -1951,6 +2028,7 @@ local function ApplyTheme()
     Anchor(tabs.rolls, "TOPLEFT", 8 + p, -28 - p)
     Anchor(tabs.board, "TOPLEFT", 72 + p, -28 - p)
     Anchor(clearBtn, "TOPRIGHT", -8 - p, -29 - p)
+    Anchor(priceToggle, "TOPRIGHT", -8 - p, -29 - p)
     for _, tab in pairs(tabs) do tab.line:SetColorTexture(ar, ag, ab, 1) end
     Anchor(divider2, "TOPLEFT", 1 + p, -49 - p, "TOPRIGHT", -1 - p, -49 - p)
     Anchor(scroll, "TOPLEFT", 6 + p, -53 - p, "BOTTOMRIGHT", -16 - p, 16 + p)
@@ -2046,8 +2124,8 @@ themeNext:SetScript("OnClick", function() StepTheme(1) end)
 
 function PositionThemePicker()
     local p = CurrentTheme().pad
-    Anchor(themeLabel, "TOPLEFT", 16 + p, -395 - p)
-    Anchor(themeNext, "TOPRIGHT", -12 - p, -390 - p)
+    Anchor(themeLabel, "TOPLEFT", 16 + p, -351 - p)
+    Anchor(themeNext, "TOPRIGHT", -12 - p, -346 - p)
     themeBox:ClearAllPoints()
     themeBox:SetPoint("RIGHT", themeNext, "LEFT", -2, 0)
     themePrev:ClearAllPoints()
@@ -2104,11 +2182,6 @@ local function RegisterBlizzardSettings()
             "When anyone in your group rolls a 67, tells your group:\n" .. ANNOUNCE_67)
         Check(st, "openOnDungeon", "Open when entering a dungeon", true,
             "Shows the leaderboard when you enter a dungeon and a new run starts.\nCorpse runs back into the same dungeon don't reopen it.")
-
-        Header("Leaderboard")
-        Check(st, "useAH", "Use auction house prices", false,
-            "Values items with Auctionator prices instead of vendor prices.\nNeeds the Auctionator addon; items with no AH price use their vendor price.",
-            function() Render() end)
 
         Header("Appearance")
         Check(st, "collapseWon", "Collapse rolls when finished", true,
